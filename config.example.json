@@ -1,0 +1,53 @@
+{
+  "listen": "127.0.0.1:5080",
+  "db": "data/stats.db",
+  "adminToken": "",
+  "trustProxy": false,
+  "log": {
+    "level": "info",
+    "format": "text"
+  },
+  "admin": {
+    "username": "admin",
+    "password": "",
+    "resetPassword": false,
+    "sessionTTL": "168h"
+  },
+  "ocap": {
+    "url": "https://ocap.example.com",
+    "dataDir": "",
+    "token": "",
+    "timeout": "5m"
+  },
+  "sync": {
+    "enabled": true,
+    "interval": "10m",
+    "tags": ["COOP"],
+    "since": "",
+    "concurrency": 2,
+    "requestDelay": "500ms",
+    "maxAttempts": 5,
+    "retryDelay": "30m"
+  },
+  "stats": {
+    "defaultTag": "COOP",
+    "minDuration": 1200,
+    "squadPattern": "\\[~?(.*?)~?\\]\\s*",
+    "squadAliases": {
+      "A.L.P.H.A.": "ALPHA"
+    },
+    "ignoreNames": []
+  },
+  "rotation": {
+    "since": "2026-01-01",
+    "sides": [
+      { "name": "Blue team", "color": "#3b82f6", "squads": ["ALPHA", "BRAVO"] },
+      { "name": "Red team", "color": "#ef4444", "squads": ["CHARLIE", "DELTA"] }
+    ]
+  },
+  "ui": {
+    "title": "OCAP Statistics",
+    "logoUrl": "",
+    "ocapUrl": ""
+  }
+}

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OCAP Statistics</title>
+  <meta name="description" content="Player and squad statistics from OCAP recordings">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#161616">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .page { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+    header.card { display: flex; flex-direction: column; gap: 12px; }
+    .head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand .logo { height: 40px; width: auto; }
+    .brand h1 { overflow-wrap: anywhere; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .controls .spacer { flex: 1; }
+    .status-line { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 20px; }
+    .hidden { display: none !important; }
+
+    /* Achievements */
+    .achievements { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+    .award {
+      display: flex; gap: 12px; align-items: center; width: 100%; font: inherit; color: inherit; cursor: default;
+      background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 12px; min-width: 0; text-align: left;
+    }
+    .award.clickable { cursor: pointer; }
+    .award.clickable:hover { border-color: var(--border-hover); background: var(--bg-hover); }
+    .award .num { min-width: 56px; text-align: center; border-right: 1px solid var(--border); padding-right: 12px; }
+    .award .num b { display: block; font-size: 22px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .award .num span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .award .who { min-width: 0; }
+    .award .who small { display: block; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+    .award .who b { display: block; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .award .who span { display: block; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Main area */
+    main { display: grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: start; }
+    @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+
+    .filters { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 16px; max-height: calc(100vh - 32px); }
+    @media (max-width: 1000px) { .filters { position: static; max-height: 340px; } }
+    .filters input[type="search"] { width: 100%; }
+    .filter-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+    .filter-list p { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 8px 0 4px; }
+    .filter-list label { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 6px; cursor: pointer; }
+    .filter-list label:hover { background: var(--bg-hover); }
+    .filter-list input { accent-color: var(--accent); width: 15px; height: 15px; }
+    .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .segmented button { justify-content: center; }
+    .segmented button.active { border-color: var(--accent); background: var(--accent-dark); color: #fff; }
+
+    .stats-card { padding: 0; overflow: hidden; }
+    .stats-card .table-wrap { max-height: calc(100vh - 120px); }
+    #statsTable thead th { position: sticky; top: 37px; background: var(--bg-2); z-index: 1; }
+    #statsTable thead tr.summary td { position: sticky; top: 0; background: var(--bg-2); z-index: 2; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); }
+    #statsTable .rank-col { width: 48px; }
+    #statsTable th[aria-sort="ascending"] button::after { content: ' ▲'; color: var(--accent); }
+    #statsTable th[aria-sort="descending"] button::after { content: ' ▼'; color: var(--accent); }
+    #statsTable td { font-variant-numeric: tabular-nums; }
+    #statsTable td:nth-child(2) { color: var(--text-strong); font-weight: 600; }
+    #statsTable td:last-child { color: var(--accent); font-weight: 700; }
+    .rank-1 { color: var(--gold); font-weight: 900; }
+    .rank-2 { color: var(--silver); font-weight: 900; }
+    .rank-3 { color: var(--bronze); font-weight: 900; }
+
+    /* Details */
+    .subtitle { color: var(--muted); font-size: 13px; margin: -8px 0 16px; }
+    .note { font-size: 13px; margin: 14px 0; }
+    .lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 16px 0; }
+    .list { background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-width: 0; }
+    .list h4 { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .list ol { list-style: none; }
+    .list li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, .04); }
+    .list li > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .list li > :last-child { color: var(--text-strong); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    .rotation-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .rotation-card { background: var(--bg-input); border-radius: 12px; padding: 16px; text-align: center; border-bottom: 4px solid var(--border); }
+    .rotation-card h3 { margin: 0; color: var(--text); }
+    .rotation-card .score { font-size: 40px; font-weight: 900; color: var(--text-strong); }
+    .rotation-card .squads { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+    td.winner { font-weight: 700; color: var(--text-strong); }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; }
+
+    footer.powered { text-align: center; font-size: 11px; color: var(--dim); padding: 8px 0; }
+    footer.powered a { color: var(--dim); }
+  </style>
+  <script src="i18n.js"></script>
+  <script src="xlsx.js" defer></script>
+</head>
+
+<body>
+  <div class="page">
+    <header class="card">
+      <div class="head-row">
+        <div class="brand">
+          <span id="logoSlot"></span>
+          <h1 id="title">OCAP Statistics</h1>
+        </div>
+        <label class="row"><span class="sr-only" data-i18n="lang.label">Language</span>
+          <select id="lang" class="lang-select" data-i18n-aria="lang.label"></select>
+        </label>
+      </div>
+      <div class="controls">
+        <label class="sr-only" for="period" data-i18n="period.label">Period</label>
+        <select id="period">
+          <option value="month" data-i18n="period.month">This month</option>
+          <option value="prevMonth" data-i18n="period.prevMonth">Last month</option>
+          <option value="year" data-i18n="period.year">This year</option>
+          <option value="all" data-i18n="period.all">All time</option>
+          <option value="custom" data-i18n="period.custom">Custom range</option>
+        </select>
+        <label class="sr-only" for="from" data-i18n="date.from">From</label>
+        <input type="date" id="from" data-i18n-aria="date.from">
+        <label class="sr-only" for="to" data-i18n="date.to">To</label>
+        <input type="date" id="to" data-i18n-aria="date.to">
+        <button type="button" id="load" class="primary" data-i18n="btn.show">Show</button>
+        <span class="spacer"></span>
+        <button type="button" id="exportExcel" data-i18n="btn.excel">Export to Excel</button>
+        <button type="button" id="copyTop10" class="hidden" data-i18n="btn.copyTop10">Copy top 10</button>
+        <button type="button" id="copyRotation" class="hidden" data-i18n="btn.copyRotation">Copy rotation</button>
+        <button type="button" id="showRotation" class="hidden" data-i18n="btn.rotation">Rotation</button>
+        <a class="btn" href="api/docs" target="_blank" rel="noopener" data-i18n="btn.api">API</a>
+      </div>
+      <div class="status-line" aria-live="polite">
+        <div id="spinner" class="spinner hidden" aria-hidden="true"></div>
+        <span id="status" data-i18n="status.loading">Loading…</span>
+      </div>
+    </header>
+
+    <section class="card" aria-labelledby="achTitle">
+      <h2 id="achTitle" data-i18n="ach.title" style="margin-bottom: 10px;">Achievements</h2>
+      <div class="achievements" id="achievements"></div>
+    </section>
+
+    <main>
+      <aside class="card filters">
+        <h2 data-i18n="filters.title">Filters</h2>
+        <input type="search" id="search" data-i18n-placeholder="filters.searchPlayers" data-i18n-aria="filters.searchPlayers">
+        <div class="filter-list" id="squadFilter"></div>
+        <div class="segmented">
+          <button type="button" id="viewPlayers" class="active" data-i18n="view.players">All players</button>
+          <button type="button" id="viewSquads" data-i18n="view.squads">By squad</button>
+        </div>
+      </aside>
+
+      <section class="card stats-card">
+        <div class="table-wrap">
+          <table id="statsTable">
+            <thead>
+              <tr class="summary">
+                <td></td>
+                <td></td>
+                <td data-i18n="table.total">Total:</td>
+                <td id="totalKills">0</td>
+                <td id="totalDeaths">0</td>
+                <td id="totalTeamKills">0</td>
+                <td colspan="3"></td>
+                <td id="summaryKD"></td>
+              </tr>
+              <tr>
+                <th scope="col" class="rank-col" data-i18n="col.rank">#</th>
+                <th scope="col" data-sort="name"><button type="button" class="sort" id="nameHeader">Name</button></th>
+                <th scope="col" data-sort="squad"><button type="button" class="sort" id="squadHeader">Squad</button></th>
+                <th scope="col" data-sort="kills"><button type="button" class="sort" data-i18n="col.kills">Kills</button></th>
+                <th scope="col" data-sort="deaths"><button type="button" class="sort" data-i18n="col.deaths">Deaths</button></th>
+                <th scope="col" data-sort="teamKills"><button type="button" class="sort" data-i18n="col.teamKills" data-i18n-title="col.teamKills.title">TK</button></th>
+                <th scope="col" data-sort="attendance"><button type="button" class="sort" data-i18n="col.attendance">Attendance</button></th>
+                <th scope="col" data-sort="accuracy"><button type="button" class="sort" data-i18n="col.accuracy">Accuracy (%)</button></th>
+                <th scope="col" data-sort="vehiclesDestroyed"><button type="button" class="sort" data-i18n="col.vehicles" data-i18n-title="col.vehicles.title">Veh.</button></th>
+                <th scope="col" data-sort="kdm"><button type="button" class="sort" data-i18n="col.kd" data-i18n-title="col.kd.title">K/D</button></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="powered"><a href="https://github.com/smitt14ua/ocap-statistics" target="_blank" rel="noopener" data-i18n="footer.powered">Powered by OCAP Statistics</a></footer>
+  </div>
+
+  <div class="modal" id="rotationModal" role="dialog" aria-modal="true" aria-labelledby="rotationTitle">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2 id="rotationTitle" data-i18n="rot.title">Rotation</h2>
+        <button type="button" class="modal-close" data-close data-i18n-aria="btn.close">&times;</button>
+      </div>
+      <p class="subtitle" id="rotationSince"></p>
+      <div class="rotation-cards" id="rotationCards"></div>
+      <div class="table-wrap" tabindex="0">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="col.date">Date</th>
+              <th data-i18n="col.mission">Mission</th>
+              <th data-i18n="col.map">Map</th>
+              <th data-i18n="col.duration">Duration</th>
+              <th data-i18n="col.winner">Winner</th>
+            </tr>
+          </thead>
+          <tbody id="rotationBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2 id="detailTitle">&hellip;</h2>
+        <button type="button" class="modal-close" data-close data-i18n-aria="btn.close">&times;</button>
+      </div>
+      <div id="detailBody"></div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>

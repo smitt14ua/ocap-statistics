@@ -1,0 +1,29 @@
+{
+  "missionName": "Test_Mission_1", "missionAuthor": "Smith", "worldName": "altis",
+  "endFrame": 1300, "captureDelay": 1, "tags": "TEST",
+  "Markers": [["x", "y", 0, 1, 0, "ff0000", -1, [[0, [1, 2], 0, 1]], [1, 1], "ICON", "Solid"]],
+  "entities": [
+    {"id": 0, "name": "[MILF] Smith", "side": "WEST", "isPlayer": 1, "type": "unit", "positions": [[[1,2,3], 0, 1, 0, "[MILF] Smith", 1]],
+     "framesFired": [[10, [1, 2, 3]], [11, [1, 2, 3]], [12, [1, 2, 3]], [13, [1, 2, 3]]]},
+    {"id": 1, "name": "[~milf~]Rookie", "side": "WEST", "isPlayer": "1", "type": "unit", "positions": [], "framesFired": []},
+    {"id": 2, "name": "[SOKIL] Enemy", "side": "EAST", "isPlayer": 1, "type": "unit", "positions": [], "framesFired": [[5, [0, 0]]]},
+    {"id": 3, "name": "HC", "side": "CIV", "isPlayer": 1, "type": "unit", "positions": [], "framesFired": []},
+    {"id": 4, "name": "Rifleman", "side": "EAST", "isPlayer": 0, "type": "unit", "positions": [], "framesFired": []},
+    {"id": 5, "name": "T-72", "side": "EAST", "isPlayer": 0, "type": "vehicle", "class": "tank", "positions": [], "framesFired": []},
+    {"id": 6, "name": "[MILF] Smith", "side": "WEST", "isPlayer": 1, "type": "unit", "positions": [], "framesFired": [[20, [1, 2]]]}
+  ],
+  "events": [
+    [-1, "connected", "[MILF] Smith"],
+    [100, "hit", 4, [0, "M4A1"], 50],
+    [101, "hit", 5, [0, "M4A1"], 50],
+    [102, "hit", 2, [6, "M4A1"], 50],
+    [110, "killed", 4, [0, "M4A1 [5.56]"], 120.5],
+    [120, "killed", 2, [6, "M4A1 [5.56]"], 300],
+    [130, "killed", 1, [0, "M4A1 [5.56]"], 10],
+    [140, "killed", 5, [2, "RPG-7"], 80],
+    [150, "killed", 0, ["null", ""], 0],
+    [160, "killed", 2, [2, "Grenade"], 0],
+    [170, "killed", 5, [0, "Javelin"], 900],
+    [1299, "endMission", ["WEST", "Blufor wins"]]
+  ]
+}

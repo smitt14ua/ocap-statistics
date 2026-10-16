@@ -1,0 +1,8 @@
+/ocap-stats
+/ocap-stats.exe
+/data/
+*.db
+*.db-shm
+*.db-wal
+/config.json
+/.env

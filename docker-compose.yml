@@ -1,0 +1,19 @@
+services:
+  ocap-stats:
+    image: ghcr.io/smitt14ua/ocap-statistics:latest
+    # Or build from source:
+    # build: .
+    restart: unless-stopped
+    env_file: .env # see .env.example
+    ports:
+      - "5080:5080"
+    volumes:
+      - ocap-stats-data:/data
+      # Running on the same host as OCAP? Mount its data directory read-only and set
+      # OCAPSTATS_OCAP_DATA_DIR=/ocap-data to read recordings from disk instead of HTTP.
+      # - /path/to/ocap/data:/ocap-data:ro
+      # Optional JSON config (see config.example.json):
+      # - ./config.json:/config.json:ro
+
+volumes:
+  ocap-stats-data:

@@ -1,0 +1,30 @@
+# Security policy
+
+## Reporting a vulnerability
+
+Please report vulnerabilities privately through GitHub's
+[security advisories](https://github.com/smitt14ua/ocap-statistics/security/advisories/new)
+instead of opening a public issue. Include the affected version, steps to reproduce and the
+impact you expect. You should get an answer within a week.
+
+## Deployment notes
+
+- Run the service behind a reverse proxy that terminates TLS, and set
+  `OCAPSTATS_TRUST_PROXY=true` only when the service is not reachable directly. Client
+  addresses (login rate limiting) and HTTPS detection (secure cookies, HSTS) rely on it.
+- Use a strong `OCAPSTATS_ADMIN_PASSWORD` and remove it from the environment once you have
+  changed the password in the admin panel, or keep `OCAPSTATS_ADMIN_PASSWORD_RESET` unset.
+- `OCAPSTATS_ADMIN_TOKEN` grants full admin access; treat it like a password.
+- Mount OCAP's data directory read-only; the service never writes to it.
+
+## Built-in protections
+
+- Admin passwords are stored as PBKDF2-HMAC-SHA256 (600 000 iterations); session tokens are
+  stored hashed and sent as `HttpOnly`, `SameSite=Strict` cookies (`__Host-` prefixed over HTTPS).
+- Failed logins are rate limited per client address and per user name; password hashing is
+  bounded so it cannot exhaust the CPU.
+- State-changing admin requests require a custom header (CSRF protection) and the admin API
+  sends no CORS headers.
+- Pages are served with a strict Content-Security-Policy (no inline scripts, no `eval`),
+  `X-Content-Type-Options`, `Referrer-Policy`, and the admin panel cannot be framed.
+  Third-party scripts are pinned with Subresource Integrity.
