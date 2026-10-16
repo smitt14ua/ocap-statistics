@@ -22,6 +22,9 @@ const (
 	StatusPending = "pending"
 	StatusDone    = "done"
 	StatusError   = "error"
+	// StatusMissing marks recordings whose data file OCAP no longer has. They are not
+	// retried automatically.
+	StatusMissing = "missing"
 )
 
 const schema = `
@@ -369,13 +372,23 @@ func writeResult(ctx context.Context, tx *sql.Tx, id int64, computeKey string, r
 
 // MarkError records a failed download/parse and schedules a retry.
 func (s *Store) MarkError(ctx context.Context, id int64, cause error, retryAt time.Time) error {
-	msg := cause.Error()
-	if len(msg) > 500 {
-		msg = msg[:500]
-	}
 	_, err := s.db.ExecContext(ctx, `UPDATE missions SET status = 'error', attempts = attempts + 1, last_error = ?, next_attempt_at = ? WHERE id = ?`,
-		msg, retryAt.Unix(), id)
+		truncate(cause.Error(), 500), retryAt.Unix(), id)
 	return err
+}
+
+// MarkMissing records that OCAP has no data file for a recording.
+func (s *Store) MarkMissing(ctx context.Context, id int64, cause error) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE missions SET status = 'missing', attempts = attempts + 1, last_error = ?, next_attempt_at = 0 WHERE id = ?`,
+		truncate(cause.Error(), 500), id)
+	return err
+}
+
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }
 
 // StaleComputed returns ids of recordings whose statistics were computed with other rules
@@ -427,6 +440,7 @@ type Counts struct {
 	Done    int `json:"done"`
 	Pending int `json:"pending"`
 	Error   int `json:"error"`
+	Missing int `json:"missing"`
 }
 
 func (s *Store) Counts(ctx context.Context) (Counts, error) {
@@ -450,6 +464,8 @@ func (s *Store) Counts(ctx context.Context) (Counts, error) {
 			c.Pending = n
 		case StatusError:
 			c.Error = n
+		case StatusMissing:
+			c.Missing = n
 		}
 	}
 	return c, rows.Err()
@@ -661,9 +677,9 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	return err
 }
 
-// RetryErrors makes failed recordings eligible for download again.
+// RetryErrors makes failed and missing recordings eligible for download again.
 func (s *Store) RetryErrors(ctx context.Context) (int, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE missions SET attempts = 0, next_attempt_at = 0 WHERE status = 'error'`)
+	res, err := s.db.ExecContext(ctx, `UPDATE missions SET status = 'error', attempts = 0, next_attempt_at = 0 WHERE status IN ('error', 'missing')`)
 	if err != nil {
 		return 0, err
 	}
@@ -674,6 +690,7 @@ func (s *Store) RetryErrors(ctx context.Context) (int, error) {
 // FailedMission is a recording that could not be processed.
 type FailedMission struct {
 	ID          int64     `json:"id"`
+	Status      string    `json:"status"` // error or missing
 	Filename    string    `json:"filename"`
 	Date        string    `json:"date"`
 	Attempts    int       `json:"attempts"`
@@ -682,8 +699,8 @@ type FailedMission struct {
 }
 
 func (s *Store) FailedMissions(ctx context.Context, limit int) ([]FailedMission, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, filename, date, attempts, last_error, next_attempt_at
-		FROM missions WHERE status = 'error' ORDER BY date DESC, id DESC LIMIT ?`, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, status, filename, date, attempts, last_error, next_attempt_at
+		FROM missions WHERE status IN ('error', 'missing') ORDER BY status = 'missing', date DESC, id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -692,7 +709,7 @@ func (s *Store) FailedMissions(ctx context.Context, limit int) ([]FailedMission,
 	for rows.Next() {
 		var f FailedMission
 		var next int64
-		if err := rows.Scan(&f.ID, &f.Filename, &f.Date, &f.Attempts, &f.LastError, &next); err != nil {
+		if err := rows.Scan(&f.ID, &f.Status, &f.Filename, &f.Date, &f.Attempts, &f.LastError, &next); err != nil {
 			return nil, err
 		}
 		f.NextAttempt = time.Unix(next, 0).UTC()

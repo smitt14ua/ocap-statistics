@@ -5,6 +5,7 @@ package syncer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -379,6 +380,13 @@ func (s *Syncer) processOne(ctx context.Context, ref store.MissionRef, rules *st
 	}
 	if err != nil {
 		if ctx.Err() != nil {
+			return err
+		}
+		if errors.Is(err, ocap.ErrNotFound) {
+			s.log.Warn("recording file missing in OCAP, skipping it", "id", ref.ID, "file", ref.Filename)
+			if mErr := s.store.MarkMissing(context.WithoutCancel(ctx), ref.ID, err); mErr != nil {
+				s.log.Error("mark missing", "id", ref.ID, "err", mErr)
+			}
 			return err
 		}
 		// Back off exponentially: retryDelay, 2x, 4x, ...

@@ -18,6 +18,10 @@ import (
 	"time"
 )
 
+// ErrNotFound reports that OCAP has no data file for a recording (it was deleted, or the
+// recording was registered without one).
+var ErrNotFound = errors.New("recording file not found in OCAP")
+
 // maxListSize bounds the operations list response (a few hundred bytes per recording).
 const maxListSize = 64 << 20
 
@@ -128,6 +132,9 @@ func (c *Client) get(ctx context.Context, u string) (*http.Response, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("GET %s: %w", u, ErrNotFound)
+		}
 		return nil, fmt.Errorf("GET %s: %s", u, resp.Status)
 	}
 	return resp, nil
