@@ -3,6 +3,7 @@ package api
 import (
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -201,5 +202,38 @@ func TestResultCacheComputesOnce(t *testing.T) {
 	// A new data generation computes again.
 	if _, err := c.get(context.Background(), 2, f, func(context.Context) (built, error) { calls.Add(1); return built{}, nil }); err != nil || calls.Load() != 2 {
 		t.Errorf("new generation: calls=%d err=%v", calls.Load(), err)
+	}
+}
+
+// TestOpenAPIMatchesRoutes keeps the published spec honest: it must be valid JSON, list no
+// admin endpoints, and every documented path must be served.
+func TestOpenAPIMatchesRoutes(t *testing.T) {
+	var spec struct {
+		Paths map[string]map[string]any `json:"paths"`
+	}
+	if err := json.Unmarshal(openapiSpec, &spec); err != nil {
+		t.Fatalf("openapi.json: %v", err)
+	}
+	_, sy, h := setup(t)
+	runSync(t, sy)
+	if len(spec.Paths) < 10 {
+		t.Fatalf("only %d documented paths", len(spec.Paths))
+	}
+	for path, ops := range spec.Paths {
+		if strings.HasPrefix(path, "/api/admin/") {
+			t.Errorf("admin endpoint %s is documented publicly", path)
+		}
+		if _, ok := ops["get"]; !ok {
+			continue
+		}
+		url := strings.NewReplacer("{name}", "Smith", "{id}", "1").Replace(path)
+		if strings.HasPrefix(path, "/api/v1/squads/") {
+			url = "/api/v1/squads/MILF"
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("documented GET %s answered %d", url, rec.Code)
+		}
 	}
 }

@@ -19,6 +19,7 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./...
       - run: go test -race ./...
+      - run: make check-web
       - uses: dominikh/staticcheck-action@v1
         with:
           install-go: false

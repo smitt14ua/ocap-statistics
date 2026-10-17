@@ -11,7 +11,10 @@
       "Bash(node --check:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(make check)",
+      "Bash(make check-web)",
+      "Bash(npx --yes html-validate@9:*)"
     ]
   }
 }

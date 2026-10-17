@@ -2,6 +2,8 @@
 
 Instructions for AI coding agents (and humans) working on this repository. Read this first; it is meant to save you from exploring the code to find where things are.
 
+**TL;DR:** run `make check` before you say you are done (Windows: `CGO_ENABLED=1 make check`). Change UI text only through `web/static/i18n.js` (5 languages). Keep the repo community-neutral. Keep this file true — `docs_test.go` fails when it mentions files, make targets or identifiers that no longer exist.
+
 ## Project in one paragraph
 
 OCAP Statistics ingests recordings from an [OCAP2](https://github.com/OCAP2/OCAP) web server (Arma 3 replays), computes player, squad and rotation statistics and serves them through a REST API, a web page and an admin panel. Its reason to exist is to take load off OCAP: each recording is processed **once** into a compact digest stored in SQLite, and every request is answered from that database. Go 1.26, no cgo (pure-Go SQLite), no frontend build step.
@@ -12,6 +14,8 @@ The project is open source and community-neutral. Never put community-specific v
 
 | Task | Command |
 |---|---|
+| **All checks** | `make check` → gofmt, vet, staticcheck, race tests, `make check-web` |
+| Web checks | `make check-web` → `node --check` on scripts + html-validate (`.htmlvalidate.json`) |
 | Build | `make build` (or `go build ./cmd/ocap-stats`) |
 | Tests | `make test` → `go test -race ./...` (race needs cgo; on Windows `CGO_ENABLED=1`) |
 | Quick tests | `go test ./...` |
@@ -19,10 +23,19 @@ The project is open source and community-neutral. Never put community-specific v
 | Vulnerabilities | `make vuln` → govulncheck |
 | Run once | `OCAPSTATS_OCAP_URL=https://ocap.example.com go run ./cmd/ocap-stats -once` |
 | Run server | `OCAPSTATS_OCAP_URL=... OCAPSTATS_ADMIN_PASSWORD=... go run ./cmd/ocap-stats` (site on :5080) |
-| JS syntax | `node --check web/static/*.js web/static/admin/*.js` |
-| HTML/a11y | `npx html-validate@9` with presets `html-validate:recommended` + `html-validate:a11y`, rule `no-inline-style` off |
+| One package | `go test ./internal/report/` (fast feedback while iterating) |
 
-Definition of done for a change: `gofmt -l .` empty, vet + staticcheck clean, `go test -race ./...` green, JS passes `node --check`, markup passes html-validate, UI changes checked in a browser with axe-core (WCAG 2.2 AA, 0 violations). The pages' CSP blocks CDN scripts: to run axe, copy `axe.min.js` into `web/static` for a throwaway build and delete it before committing.
+Definition of done: `make check` green; UI changes also checked in a browser with axe-core (WCAG 2.2 AA, 0 violations) — the pages' CSP blocks CDN scripts, so copy `axe.min.js` into `web/static` for a throwaway build and delete it before committing; README/OpenAPI/AGENTS.md updated when behaviour, API or structure changed.
+
+Guard tests that encode project rules (prefer adding a test over adding prose here):
+
+| Test | Enforces |
+|---|---|
+| `web/web_test.go` | all 5 languages have identical keys; every key used in markup/scripts exists; every formula variable has a `var.*` help text |
+| `docs_test.go` | files, `make` targets and `pkg.Identifier`s mentioned in this file exist |
+| `internal/api/server_test.go` `TestOpenAPIMatchesRoutes` | every documented path is served; no admin endpoint is documented |
+| `internal/api/server_test.go` `TestStaticHandler` | CSP and framing headers, gzip/ETag, no path traversal |
+| `internal/stats/compute_test.go` | counting rules on the fixture `testdata/recording.json` |
 
 CI (`.github/workflows/ci.yml`) runs the same checks and publishes `ghcr.io/<owner>/ocap-statistics` for linux/amd64 and linux/arm64 on pushes to `main`.
 
@@ -67,7 +80,7 @@ web/static/app.css            shared design tokens and components
 **Add a per-player statistic** (example: kill assists was added this way)
 1. `stats.PlayerRow` field + counting in `stats.Compute` (+ test in `compute_test.go`, fixture in `testdata/recording.json`); bump `ComputeVersion`. If it needs new recording data, extend `digest` and bump `digest.Version`.
 2. Store: column in `schema`, `migrate()` for old databases, `writeResult` insert, `scanRows` + the `SELECT` lists in `Rows`/`MissionRows`.
-3. Report: fields on `Player`, `Squad`, maybe `Totals`; sums in `Build` and `buildSquads`; sort keys in `SortPlayers`/`SortSquads`; formula variable in `report.Variables` + `playerVars`/`squadVars` (and the variable list in `admin.js` `renderVarList`).
+3. Report: fields on `Player`, `Squad`, maybe `Totals`; sums in `Build` and `buildSquads`; sort keys in `SortPlayers`/`SortSquads` and the allowed lists `report.PlayerSortFields`/`report.SquadSortFields`; formula variable in `report.Variables` + `playerVars`/`squadVars`, the variable list in `admin.js` `renderVarList` and a `var.*` help string (the web test enforces it); the default sort choices in `admin.js` `renderSortOptions`.
 4. API: `missionRow`/`missionPlayer` in `stats.go`, CSV headers/rows, `openapi.json` schemas.
 5. UI: `<th>` in `index.html` (+ summary row colspan), `row()`, `headerLabels()`, Excel rows/widths, detail tiles and tables in `app.js`; strings in `i18n.js` for all languages; README "How statistics are computed".
 
@@ -84,6 +97,14 @@ web/static/app.css            shared design tokens and components
 - **Security**: strict CSP (no inline scripts, no `eval`, no new script origins; third-party scripts only on demand with SRI); build DOM with `el()` + `textContent`, never `innerHTML` with data; validate settings that reach HTML/CSS; trust `X-Forwarded-*` only with `trustProxy`; admin API stays same-origin with the `X-Requested-With` CSRF header. See `SECURITY.md`.
 - **Accessibility**: real buttons/links for interactive elements, `aria-sort` on sortable headers, WAI-ARIA tabs, modals make `.page` inert, text contrast ≥ 4.5:1 using tokens in `app.css`, user-defined colours never used for text.
 - **Language**: code, comments, docs, commit messages and API messages in technical English. Commits: imperative subject, wrapped body with what and why, no AI attribution lines.
+
+## Working efficiently here
+
+- Start from the repository map and the recipes; open the named file/function instead of searching the whole tree. `internal/api/stats.go` and `web/static/app.js` are the usual entry points for "show X on the site".
+- `i18n.js` is large: edit the five language blocks with targeted replacements (or a small script), don't rewrite the file.
+- `report`, `store`, `settings` and `syncer` are tested through `internal/api` integration tests (`setup()` builds a fake OCAP, a temp database and the full handler); add cases there rather than mocking.
+- For UI work, build once, run with `OCAPSTATS_SYNC_ENABLED=false` against a copied database, and drive the page in a browser; the API is fastest to check with curl.
+- When you learn something non-obvious about this codebase, add it under Gotchas (one line) in the same change.
 
 ## Gotchas
 
