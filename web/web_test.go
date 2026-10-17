@@ -50,7 +50,7 @@ func translations(t *testing.T) map[string][]string {
 // TestTranslationsComplete keeps every language in sync with English.
 func TestTranslationsComplete(t *testing.T) {
 	langs := translations(t)
-	for _, want := range []string{"en", "cs", "de", "pl", "uk"} {
+	for _, want := range []string{"en", "be", "cs", "de", "kk", "pl", "uk"} {
 		if _, ok := langs[want]; !ok {
 			t.Fatalf("language file i18n/%s.js missing", want)
 		}

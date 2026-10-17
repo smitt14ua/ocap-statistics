@@ -3,7 +3,7 @@
 // The language is picked from the browser settings and can be switched manually; the choice
 // is remembered in localStorage.
 (function () {
-  const LANGS = { en: 'English', cs: 'Čeština', de: 'Deutsch', pl: 'Polski', uk: 'Українська' };
+  const LANGS = { en: 'English', be: 'Беларуская', cs: 'Čeština', de: 'Deutsch', kk: 'Қазақша', pl: 'Polski', uk: 'Українська' };
   const STORAGE_KEY = 'ocapstats.lang';
 
   // Filled by the per-language files in i18n/, which load before this script.

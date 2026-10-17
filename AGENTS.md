@@ -2,7 +2,7 @@
 
 Instructions for AI coding agents (and humans) working on this repository. Read this first; it is meant to save you from exploring the code to find where things are.
 
-**TL;DR:** run `make check` before you say you are done (Windows: `CGO_ENABLED=1 make check`). Frontend work: read `web/AGENTS.md` first. UI text only through `web/static/i18n/*.js` (5 languages). Before changing how something fundamental works, read `docs/decisions.md`. Keep the repo community-neutral. Keep the guides true — `docs_test.go` fails when they mention files, make targets or identifiers that no longer exist.
+**TL;DR:** run `make check` before you say you are done (Windows: `CGO_ENABLED=1 make check`). Frontend work: read `web/AGENTS.md` first. UI text only through `web/static/i18n/*.js` (7 languages). Before changing how something fundamental works, read `docs/decisions.md`. Keep the repo community-neutral. Keep the guides true — `docs_test.go` fails when they mention files, make targets or identifiers that no longer exist.
 
 ## Project in one paragraph
 
@@ -31,7 +31,7 @@ Guard tests that encode project rules (prefer adding a test over adding prose he
 
 | Test | Enforces |
 |---|---|
-| `web/web_test.go` | all 5 languages have identical keys; every page loads every language file; every key used in markup/scripts exists; every formula variable has a `var.*` help text |
+| `web/web_test.go` | all 7 languages have identical keys; every page loads every language file; every key used in markup/scripts exists; every formula variable has a `var.*` help text |
 | `docs_test.go` | files, `make` targets and `pkg.Identifier`s mentioned in this file and `web/AGENTS.md` exist |
 | `internal/api/server_test.go` `TestOpenAPIMatchesRoutes` | every documented path is served; no admin endpoint is documented |
 | `internal/api/server_test.go` `TestStaticHandler` | CSP and framing headers, gzip/ETag, no path traversal |
@@ -65,7 +65,7 @@ web/AGENTS.md                 frontend guide: files, CSP/DOM/i18n/a11y rules, ad
 web/static/index.html, app.js site (stats table, achievements, modals, export, screenshots)
 web/static/admin/             admin panel (index.html, admin.js)
 web/static/i18n.js            language detection/switching, t(); strings live in i18n/<lang>.js
-web/static/i18n/              UI strings, one file per language (en, cs, de, pl, uk)
+web/static/i18n/              UI strings, one file per language (en, be, cs, de, kk, pl, uk)
 web/static/xlsx.js            dependency-free XLSX writer
 web/static/app.css            shared design tokens and components
 docs/decisions.md             why things are built the way they are (SQLite, digests, CSP, ...)
@@ -88,7 +88,7 @@ docs/decisions.md             why things are built the way they are (SQLite, dig
 4. API: `missionRow`/`missionPlayer` in `stats.go`, CSV headers/rows, `openapi.json` schemas.
 5. UI: `<th>` in `index.html` (+ summary row colspan), `row()`, `headerLabels()`, Excel rows/widths, detail tiles and tables in `app.js`; strings in all `web/static/i18n/*.js` files; README "How statistics are computed".
 
-**Add a UI string**: add the key to every file in `web/static/i18n/` (en, cs, de, pl, uk — key sets must be identical), use `data-i18n` / `data-i18n-placeholder` / `data-i18n-title` / `data-i18n-aria` in markup or `t('key', {var})` in JS. More in `web/AGENTS.md`.
+**Add a UI string**: add the key to every file in `web/static/i18n/` (en, be, cs, de, kk, pl, uk — key sets must be identical), use `data-i18n` / `data-i18n-placeholder` / `data-i18n-title` / `data-i18n-aria` in markup or `t('key', {var})` in JS. More in `web/AGENTS.md`.
 
 **Add a setting editable in the admin panel**: field in `settings.Settings` (+ `FromConfig` default from `config`, validation in `Normalize`), decide in `Manager.apply` whether it needs a recompute or sync, form field + `fillForms`/`collectSettings` in `admin.js`, strings in `web/static/i18n/*.js`.
 
