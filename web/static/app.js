@@ -330,7 +330,7 @@ class StatsApp {
           this.render();
         });
         boxes.push(cb);
-        return el('label', {}, cb, squad);
+        return el('label', {}, cb, this.sideSwatch(squad), squad);
       }));
     syncAll();
     all.addEventListener('change', () => {
@@ -373,6 +373,22 @@ class StatsApp {
     });
   }
 
+  // sideOf returns the rotation side a squad belongs to: the first side with a tag the squad
+  // name contains (case-insensitive), the same matching as the rotation report.
+  sideOf(squad) {
+    if (!squad) return null;
+    const u = squad.toUpperCase();
+    return ((this.cfg.rotation && this.cfg.rotation.sides) || [])
+      .find(s => (s.squads || []).some(tag => tag && u.includes(tag.toUpperCase()))) || null;
+  }
+
+  // sideSwatch marks a squad with its rotation side colour. The colour is user-defined, so it
+  // only fills the dot; the side name is its accessible name and tooltip.
+  sideSwatch(squad) {
+    const side = this.sideOf(squad);
+    return side && el('span', { class: 'swatch', style: `background:${side.color || '#888'}`, role: 'img', 'aria-label': side.name, title: side.name });
+  }
+
   row(x, squads) {
     return [
       squads ? (x.name || t('noSquad')) : x.name,
@@ -400,12 +416,14 @@ class StatsApp {
 
     const rows = items.map((x, i) => {
       const open = () => squads ? this.openSquad(x.name) : this.openPlayer(x.name);
-      const [name, ...rest] = this.row(x, squads);
+      const [name, second, ...rest] = this.row(x, squads);
+      const side = this.sideSwatch(squads ? x.name : x.squad);
       // The name is a button so the details are reachable from the keyboard; the whole row is
       // clickable for the mouse.
       const tr = el('tr', { class: 'clickable' },
         el('td', { class: i < 3 ? `rank-${i + 1}` : '' }, i + 1),
-        el('td', {}, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, name)),
+        el('td', {}, squads ? side : null, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, name)),
+        el('td', {}, squads ? null : side, second),
         rest.map(v => el('td', {}, v)));
       tr.addEventListener('click', open);
       return tr;
