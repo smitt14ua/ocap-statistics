@@ -41,6 +41,11 @@
   'status.updated': 'Updated: {when}',
   'status.queue': 'Waiting to be processed: {n}',
   'status.syncError': 'Sync error: {e}',
+  'notice.sync': 'New recordings are being processed.',
+  'notice.resync': 'All recordings are being processed again from scratch.',
+  'notice.recompute': 'Statistics are being recalculated.',
+  'notice.incomplete': 'The figures may be incomplete until it finishes; the page updates by itself.',
+  'notice.progress': '({done} of {total})',
 
   'ach.title': 'Achievements',
   'ach.topKiller': 'Butcher',

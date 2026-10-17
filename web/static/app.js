@@ -51,6 +51,13 @@ function loadLib(name) {
   return lib.promise;
 }
 
+// busyTask returns the sync task that is changing the statistics right now, or null. A routine
+// sync that finds no new recordings does not count, so the notice does not flash every interval.
+function busyTask(sync) {
+  if (sync.running && (sync.task !== 'sync' || sync.progress.total > 0)) return sync.task;
+  return ['resync', 'recompute'].find(task => sync.queued.includes(task)) || null;
+}
+
 async function apiGet(path) {
   const res = await fetch(`api/v1/${path}`);
   if (!res.ok) {
@@ -99,7 +106,6 @@ class StatsApp {
     }
     this.setView(params.get('view') === 'squads' ? 'squads' : 'players', false);
     await this.load();
-    setInterval(() => this.refreshStatus(), 60000);
   }
 
   bind() {
@@ -243,13 +249,33 @@ class StatsApp {
       parts.push(t('status.missions', { n: tot.missions }), t('status.players', { n: tot.players }),
         t('status.squads', { n: tot.squads }), t('status.time', { s: this.loadTime }));
     }
+    let st = null;
     try {
-      const st = await apiGet('status');
+      st = await apiGet('status');
       parts.push(t('status.updated', { when: window.i18n.relTime(st.sync.lastSuccess) }));
       if (st.missions.pending > 0) parts.push(t('status.queue', { n: st.missions.pending }));
       if (st.sync.lastError) parts.push(t('status.syncError', { e: st.sync.lastError }));
     } catch { /* status is optional */ }
     $('status').textContent = parts.length ? parts.join(' | ') : t('status.loading');
+
+    const task = st && busyTask(st.sync);
+    const wasBusy = this.syncTask;
+    this.syncTask = task;
+    this.renderSyncNotice(st);
+    // Poll often while statistics are changing, and reload them once the work is done.
+    clearTimeout(this.statusTimer);
+    this.statusTimer = setTimeout(() => this.refreshStatus(), task ? 5000 : 60000);
+    if (wasBusy && !task && st) this.load();
+  }
+
+  // renderSyncNotice warns that the figures may be incomplete while a sync, recompute or resync runs.
+  renderSyncNotice(st) {
+    const task = this.syncTask;
+    $('syncNotice').hidden = !task;
+    if (!task) return;
+    $('syncNoticeTitle').textContent = t(`notice.${task}`);
+    const p = st.sync.running && st.sync.task === task ? st.sync.progress : null;
+    $('syncNoticeProgress').textContent = p && p.total > 0 ? t('notice.progress', { done: p.done, total: p.total }) : '';
   }
 
   setView(mode, update = true) {

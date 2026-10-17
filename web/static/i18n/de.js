@@ -40,6 +40,11 @@
   'status.updated': 'Aktualisiert: {when}',
   'status.queue': 'Warten auf Verarbeitung: {n}',
   'status.syncError': 'Synchronisierungsfehler: {e}',
+  'notice.sync': 'Neue Aufnahmen werden verarbeitet.',
+  'notice.resync': 'Alle Aufnahmen werden von Grund auf neu verarbeitet.',
+  'notice.recompute': 'Die Statistik wird neu berechnet.',
+  'notice.incomplete': 'Bis dahin können die Zahlen unvollständig sein; die Seite aktualisiert sich selbst.',
+  'notice.progress': '({done} von {total})',
 
   'ach.title': 'Auszeichnungen',
   'ach.topKiller': 'Schlächter',

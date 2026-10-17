@@ -40,6 +40,11 @@
   'status.updated': 'Оновлено: {when}',
   'status.queue': 'В черзі на обробку: {n}',
   'status.syncError': 'Помилка синхронізації: {e}',
+  'notice.sync': 'Обробляються нові записи.',
+  'notice.resync': 'Усі записи обробляються заново.',
+  'notice.recompute': 'Статистика перераховується.',
+  'notice.incomplete': 'Поки це не закінчиться, дані можуть бути неповними; сторінка оновиться сама.',
+  'notice.progress': '({done} з {total})',
 
   'ach.title': 'Досягнення',
   'ach.topKiller': "М'ясник",

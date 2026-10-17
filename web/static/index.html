@@ -21,6 +21,10 @@
     .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .controls .spacer { flex: 1; }
     .status-line { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 20px; }
+    .notice { margin-top: 10px; padding: 10px 14px; border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: var(--radius-sm); background: var(--bg-3); font-size: 13px; }
+    .notice[hidden] { display: none; }
+    .notice b { color: var(--warn); }
+    .notice .progress { color: var(--muted); font-variant-numeric: tabular-nums; }
     .hidden { display: none !important; }
 
     /* Achievements */
@@ -146,6 +150,10 @@
       <div class="status-line" aria-live="polite">
         <div id="spinner" class="spinner hidden" aria-hidden="true"></div>
         <span id="status" data-i18n="status.loading">Loading…</span>
+      </div>
+      <div id="syncNotice" class="notice" role="status" hidden>
+        <b id="syncNoticeTitle"></b> <span id="syncNoticeText" data-i18n="notice.incomplete">The figures may be incomplete until it finishes; the page updates by itself.</span>
+        <span id="syncNoticeProgress" class="progress" aria-live="off"></span>
       </div>
     </header>
 

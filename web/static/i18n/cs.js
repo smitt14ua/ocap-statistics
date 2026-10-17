@@ -40,6 +40,11 @@
   'status.updated': 'Aktualizováno: {when}',
   'status.queue': 'Čeká na zpracování: {n}',
   'status.syncError': 'Chyba synchronizace: {e}',
+  'notice.sync': 'Zpracovávají se nové záznamy.',
+  'notice.resync': 'Všechny záznamy se zpracovávají znovu od začátku.',
+  'notice.recompute': 'Statistiky se přepočítávají.',
+  'notice.incomplete': 'Do dokončení mohou být údaje neúplné; stránka se aktualizuje sama.',
+  'notice.progress': '({done} z {total})',
 
   'ach.title': 'Úspěchy',
   'ach.topKiller': 'Řezník',

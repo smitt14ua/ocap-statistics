@@ -40,6 +40,11 @@
   'status.updated': 'Zaktualizowano: {when}',
   'status.queue': 'Oczekuje na przetworzenie: {n}',
   'status.syncError': 'Błąd synchronizacji: {e}',
+  'notice.sync': 'Przetwarzane są nowe nagrania.',
+  'notice.resync': 'Wszystkie nagrania są przetwarzane od nowa.',
+  'notice.recompute': 'Statystyki są przeliczane.',
+  'notice.incomplete': 'Do zakończenia dane mogą być niepełne; strona odświeży się sama.',
+  'notice.progress': '({done} z {total})',
 
   'ach.title': 'Osiągnięcia',
   'ach.topKiller': 'Rzeźnik',
