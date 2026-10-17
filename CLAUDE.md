@@ -7,6 +7,8 @@ All project guidance lives in AGENTS.md (shared with other coding agents):
 ## Claude Code specifics
 
 - Run `make check` (Windows: `CGO_ENABLED=1 make check`) before reporting work as done; it and the other build/test commands are pre-approved in `.claude/settings.json`.
-- Prefer the dedicated Read/Edit/Grep tools; open the files named in AGENTS.md instead of exploring the tree.
+- Prefer the dedicated Read/Edit/Grep tools; open the files named in AGENTS.md instead of exploring the tree. `web/CLAUDE.md` loads the frontend guide automatically when you work under `web/`.
+- A PostToolUse hook (`.claude/hooks/check-edit.mjs`) gofmt's every edited Go file and syntax-checks edited JS; if it reports an error, fix it before moving on. After it reformats a file, re-read the region before the next edit there.
+- Read `docs/decisions.md` before proposing changes to storage, the sync pipeline, the CSP or the frontend architecture.
 - For UI changes, verify in the browser (Claude in Chrome) and run axe-core as described in AGENTS.md before reporting the work as done.
 - Do not add attribution lines to commit messages.

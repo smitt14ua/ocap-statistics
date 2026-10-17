@@ -1,6 +1,6 @@
 // Package ocapstatistics_test keeps the contributor documentation honest: every file, make
-// target and Go identifier that AGENTS.md mentions must exist, so the guide cannot silently
-// drift away from the code.
+// target and Go identifier that the agent guides mention must exist, so the guides cannot
+// silently drift away from the code.
 package ocapstatistics_test
 
 import (
@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 )
+
+// guides are the agent guides checked by these tests.
+var guides = []string{"AGENTS.md", "web/AGENTS.md"}
 
 func readFile(t *testing.T, name string) string {
 	t.Helper()
@@ -52,24 +55,60 @@ func TestAgentsMapPaths(t *testing.T) {
 	}
 }
 
-// TestAgentsMakeTargets checks that every `make <target>` in AGENTS.md exists.
+// TestAgentsMakeTargets checks that every `make <target>` in the guides exists.
 func TestAgentsMakeTargets(t *testing.T) {
-	doc, makefile := readFile(t, "AGENTS.md"), readFile(t, "Makefile")
-	targets := regexp.MustCompile("`make ([a-z-]+)`").FindAllStringSubmatch(doc, -1)
-	if len(targets) == 0 {
-		t.Fatal("no make targets found in AGENTS.md")
-	}
-	for _, m := range targets {
-		if !regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(m[1]) + `:`).MatchString(makefile) {
-			t.Errorf("AGENTS.md mentions `make %s`, but the Makefile has no such target", m[1])
+	makefile := readFile(t, "Makefile")
+	found := 0
+	for _, guide := range guides {
+		for _, m := range regexp.MustCompile("`make ([a-z-]+)").FindAllStringSubmatch(readFile(t, guide), -1) {
+			found++
+			if !regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(m[1]) + `:`).MatchString(makefile) {
+				t.Errorf("%s mentions `make %s`, but the Makefile has no such target", guide, m[1])
+			}
 		}
+	}
+	if found == 0 {
+		t.Fatal("no make targets found in the guides")
 	}
 }
 
-// TestAgentsIdentifiers checks Go identifiers written as `pkg.Name` in AGENTS.md: the name
+// TestAgentsPaths checks paths written in backticks (`dir/file.ext`, `dir/*.js`): they must
+// exist relative to the guide or to the repository root.
+func TestAgentsPaths(t *testing.T) {
+	re := regexp.MustCompile("`([A-Za-z0-9_.*-]+/[A-Za-z0-9_./*-]*)`")
+	checked := 0
+	for _, guide := range guides {
+		for _, m := range re.FindAllStringSubmatch(readFile(t, guide), -1) {
+			p := m[1]
+			first, _, _ := strings.Cut(p, "/")
+			if strings.Contains(first, ".") && !strings.HasPrefix(first, ".") {
+				continue // module path such as example.org/pkg
+			}
+			checked++
+			found := false
+			for _, base := range []string{filepath.Dir(guide), "."} {
+				if matches, _ := filepath.Glob(filepath.Join(base, strings.TrimSuffix(p, "/"))); len(matches) > 0 {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("%s mentions %s, which does not exist", guide, p)
+			}
+		}
+	}
+	if checked < 20 {
+		t.Fatalf("checked only %d paths; did the guide style change?", checked)
+	}
+}
+
+// TestAgentsIdentifiers checks Go identifiers written as `pkg.Name` in the guides: the name
 // must appear in that package's source.
 func TestAgentsIdentifiers(t *testing.T) {
-	doc := readFile(t, "AGENTS.md")
+	var doc string
+	for _, guide := range guides {
+		doc += readFile(t, guide)
+	}
 	pkgs := map[string]string{}
 	_ = filepath.WalkDir("internal", func(p string, d fs.DirEntry, err error) error {
 		if err == nil && d.IsDir() && p != "internal" {
@@ -94,10 +133,10 @@ func TestAgentsIdentifiers(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("AGENTS.md mentions %s.%s, which does not exist in %s", m[1], m[2], dir)
+			t.Errorf("a guide mentions %s.%s, which does not exist in %s", m[1], m[2], dir)
 		}
 	}
 	if checked < 10 {
-		t.Fatalf("checked only %d identifiers; did the AGENTS.md style change?", checked)
+		t.Fatalf("checked only %d identifiers; did the guide style change?", checked)
 	}
 }

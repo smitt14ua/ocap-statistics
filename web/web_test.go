@@ -2,6 +2,7 @@ package web
 
 import (
 	"io/fs"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -11,8 +12,8 @@ import (
 )
 
 var (
-	langBlockRe = regexp.MustCompile(`(?ms)^    (\w\w): \{\n(.*?)^    \},`)
-	keyRe       = regexp.MustCompile(`(?m)^      '([^']+)':`)
+	keyRe   = regexp.MustCompile(`(?m)^  '([^']+)':`)
+	langsRe = regexp.MustCompile(`const LANGS = \{([^}]*)\}`)
 	// Keys used by markup and scripts: data-i18n* attributes, t('key') calls and
 	// 'data-i18n…': 'key' properties of el() calls.
 	usedRes = []*regexp.Regexp{
@@ -23,21 +24,25 @@ var (
 	}
 )
 
-// translations returns the keys of every language block in i18n.js.
+// translations returns the keys of every language file in i18n/, by language code.
 func translations(t *testing.T) map[string][]string {
 	t.Helper()
-	src, err := fs.ReadFile(FS(), "i18n.js")
+	files, err := fs.Glob(FS(), "i18n/*.js")
 	if err != nil {
 		t.Fatal(err)
 	}
 	langs := map[string][]string{}
-	for _, m := range langBlockRe.FindAllStringSubmatch(string(src), -1) {
+	for _, f := range files {
+		src, err := fs.ReadFile(FS(), f)
+		if err != nil {
+			t.Fatal(err)
+		}
 		var keys []string
-		for _, k := range keyRe.FindAllStringSubmatch(m[2], -1) {
+		for _, k := range keyRe.FindAllStringSubmatch(string(src), -1) {
 			keys = append(keys, k[1])
 		}
 		slices.Sort(keys)
-		langs[m[1]] = keys
+		langs[strings.TrimSuffix(path.Base(f), ".js")] = keys
 	}
 	return langs
 }
@@ -47,12 +52,12 @@ func TestTranslationsComplete(t *testing.T) {
 	langs := translations(t)
 	for _, want := range []string{"en", "cs", "de", "pl", "uk"} {
 		if _, ok := langs[want]; !ok {
-			t.Fatalf("language %q missing from i18n.js", want)
+			t.Fatalf("language file i18n/%s.js missing", want)
 		}
 	}
 	en := langs["en"]
 	if len(en) < 200 { // guards the parser: an empty match would make this test pass vacuously
-		t.Fatalf("parsed only %d English keys; did the i18n.js layout change?", len(en))
+		t.Fatalf("parsed only %d English keys; did the i18n/en.js layout change?", len(en))
 	}
 	for lang, keys := range langs {
 		if dup := duplicates(keys); len(dup) > 0 {
@@ -67,12 +72,41 @@ func TestTranslationsComplete(t *testing.T) {
 	}
 }
 
-// TestUsedKeysExist fails when markup or scripts use a key that i18n.js does not define.
+// TestLanguagesWired checks that every language file is listed in i18n.js and loaded by every
+// page before i18n.js, so a new language cannot be half added.
+func TestLanguagesWired(t *testing.T) {
+	core, err := fs.ReadFile(FS(), "i18n.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := langsRe.FindSubmatch(core)
+	if m == nil {
+		t.Fatal("i18n.js has no LANGS table")
+	}
+	for lang := range translations(t) {
+		if !strings.Contains(string(m[1]), lang+":") {
+			t.Errorf("i18n/%s.js is not listed in LANGS of i18n.js", lang)
+		}
+		for page, prefix := range map[string]string{"index.html": "", "admin/index.html": "../"} {
+			src, err := fs.ReadFile(FS(), page)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tag := `<script src="` + prefix + `i18n/` + lang + `.js"></script>`
+			at, coreAt := strings.Index(string(src), tag), strings.Index(string(src), `<script src="`+prefix+`i18n.js"></script>`)
+			if at < 0 || coreAt < 0 || at > coreAt {
+				t.Errorf("%s must load %s before i18n.js", page, tag)
+			}
+		}
+	}
+}
+
+// TestUsedKeysExist fails when markup or scripts use a key that the language files do not define.
 func TestUsedKeysExist(t *testing.T) {
 	en := translations(t)["en"]
 	used := 0
 	err := fs.WalkDir(FS(), ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || p == "i18n.js" || !(strings.HasSuffix(p, ".html") || strings.HasSuffix(p, ".js")) {
+		if err != nil || d.IsDir() || strings.HasPrefix(p, "i18n/") || !(strings.HasSuffix(p, ".html") || strings.HasSuffix(p, ".js")) {
 			return err
 		}
 		src, err := fs.ReadFile(FS(), p)

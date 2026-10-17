@@ -26,7 +26,7 @@ check: ## Everything CI checks, plus the web checks (needs Node.js for check-web
 	$(MAKE) check-web
 
 check-web: ## JS syntax and HTML/accessibility validation of the pages
-	for f in web/static/*.js web/static/admin/*.js; do node --check $$f || exit 1; done
+	for f in web/static/*.js web/static/i18n/*.js web/static/admin/*.js; do node --check $$f || exit 1; done
 	npx --yes html-validate@9 web/static/index.html web/static/admin/index.html
 
 run: build ## Run locally (needs OCAPSTATS_OCAP_URL)

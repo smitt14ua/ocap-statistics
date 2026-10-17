@@ -174,11 +174,12 @@ make test    # go test -race ./...
 make lint    # go vet + staticcheck
 make vuln    # govulncheck
 make build   # ./ocap-stats with version information
+make check   # everything CI runs, plus HTML/JS checks (needs Node.js)
 ```
 
 `ocap-stats -version` prints the build version; `GET /api/v1/status` reports it as well.
 
-Contributors and AI coding agents: start with [AGENTS.md](AGENTS.md) — architecture, where to change what, and the definition of done.
+Contributors and AI coding agents: start with [AGENTS.md](AGENTS.md) — architecture, where to change what, and the definition of done. Frontend specifics are in [web/AGENTS.md](web/AGENTS.md); the reasons behind the main design choices are in [docs/decisions.md](docs/decisions.md).
 
 ```
 cmd/ocap-stats      entry point
@@ -192,7 +193,7 @@ internal/syncer     task loop: sync, recompute, resync
 internal/auth       admin passwords and sessions
 internal/api        REST API, admin API, caches, static files, security headers, OpenAPI
 internal/formula    formula language of custom columns
-web/static          web page, admin panel, translations (i18n.js), XLSX writer
+web/static          web page, admin panel, translations (i18n/<lang>.js), XLSX writer
 ```
 
 ## License
