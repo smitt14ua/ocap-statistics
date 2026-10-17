@@ -1109,13 +1109,13 @@
           "topKiller": {
             "$ref": "#/components/schemas/PlayerAward"
           },
+          "topAssists": {
+            "$ref": "#/components/schemas/PlayerAward"
+          },
           "topTeamKiller": {
             "$ref": "#/components/schemas/PlayerAward"
           },
           "topVehicles": {
-            "$ref": "#/components/schemas/PlayerAward"
-          },
-          "topDeaths": {
             "$ref": "#/components/schemas/PlayerAward"
           },
           "topSquad": {

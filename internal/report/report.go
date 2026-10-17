@@ -432,9 +432,9 @@ type KillAward struct {
 
 type Achievements struct {
 	TopKiller     *PlayerAward `json:"topKiller"`     // most kills
+	TopAssists    *PlayerAward `json:"topAssists"`    // most kill assists
 	TopTeamKiller *PlayerAward `json:"topTeamKiller"` // most team kills
 	TopVehicles   *PlayerAward `json:"topVehicles"`   // most vehicles destroyed
-	TopDeaths     *PlayerAward `json:"topDeaths"`     // most deaths (ties: lower K/D)
 	TopSquad      *SquadAward  `json:"topSquad"`      // best confidence-weighted squad K/D
 	LongestKill   *KillAward   `json:"longestKill"`   // longest kill of a player or AI soldier
 }
@@ -455,18 +455,9 @@ func (r *Result) Achievements(longest *store.Kill) Achievements {
 		if p.VehiclesDestroyed > 0 && (a.TopVehicles == nil || float64(p.VehiclesDestroyed) > a.TopVehicles.Value) {
 			a.TopVehicles = award(p, p.VehiclesDestroyed)
 		}
-	}
-	var topDeaths *Player
-	for i, p := range r.Players {
-		if p.Deaths == 0 {
-			continue
+		if p.KillAssists > 0 && (a.TopAssists == nil || float64(p.KillAssists) > a.TopAssists.Value) {
+			a.TopAssists = award(p, p.KillAssists)
 		}
-		if topDeaths == nil || p.Deaths > topDeaths.Deaths || (p.Deaths == topDeaths.Deaths && p.KD < topDeaths.KD) {
-			topDeaths = &r.Players[i]
-		}
-	}
-	if topDeaths != nil {
-		a.TopDeaths = award(*topDeaths, topDeaths.Deaths)
 	}
 	for _, s := range r.Squads {
 		if s.Name != "" && (a.TopSquad == nil || s.Score > a.TopSquad.Score) {

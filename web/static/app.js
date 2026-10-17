@@ -441,9 +441,9 @@ class StatsApp {
     const squadOf = (p) => p.squadRaw ? `[${p.squadRaw}]` : t('noSquad');
     const cards = [
       { award: a.topKiller, label: 'ach.topKiller', unit: 'unit.kills' },
+      { award: a.topAssists, label: 'ach.topAssists', unit: 'unit.assists' },
       { award: a.topTeamKiller, label: 'ach.topTeamKiller', unit: 'unit.teamKills' },
       { award: a.topVehicles, label: 'ach.topVehicles', unit: 'unit.vehicles' },
-      { award: a.topDeaths, label: 'ach.topDeaths', unit: 'unit.deaths' },
       { award: a.topSquad && { name: a.topSquad.name, value: a.topSquad.kd }, label: 'ach.topSquad', unit: 'unit.kd', squad: true, sub: () => t('ach.bestSquad') },
       { award: a.longestKill, label: 'ach.longestKill', unit: 'unit.metres', sub: (p) => `${squadOf(p)} · ${p.weapon || ''}`, title: (p) => `${p.name} → ${p.victim}, ${p.weapon} (${p.date})` },
     ];
