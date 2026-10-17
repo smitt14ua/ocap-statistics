@@ -58,8 +58,14 @@
 
     .stats-card { padding: 0; overflow: hidden; }
     .stats-card .table-wrap { max-height: calc(100vh - 120px); }
-    #statsTable thead th { position: sticky; top: 37px; background: var(--bg-2); z-index: 1; }
-    #statsTable thead tr.summary td { position: sticky; top: 0; background: var(--bg-2); z-index: 2; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); }
+    /* The whole header (summary + column titles) sticks as one block, so no gap between the
+       two rows can show the data scrolling underneath. Borders are drawn with box-shadow
+       because collapsed borders do not move with sticky elements. */
+    #statsTable { border-collapse: separate; border-spacing: 0; }
+    #statsTable thead { position: sticky; top: 0; z-index: 2; background: var(--bg-2); }
+    #statsTable thead th, #statsTable thead td { background: var(--bg-2); border-bottom: 0; }
+    #statsTable thead tr.summary td { font-weight: 700; color: var(--accent); box-shadow: inset 0 -1px var(--border); }
+    #statsTable thead tr:last-child th { box-shadow: inset 0 -1px var(--border); }
     #statsTable .rank-col { width: 48px; }
     #statsTable th[aria-sort="ascending"] button::after { content: ' ▲'; color: var(--accent); }
     #statsTable th[aria-sort="descending"] button::after { content: ' ▼'; color: var(--accent); }
