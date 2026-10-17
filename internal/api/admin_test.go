@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smitt14ua/ocap-statistics/internal/report"
 	"github.com/smitt14ua/ocap-statistics/internal/settings"
 	"github.com/smitt14ua/ocap-statistics/internal/syncer"
 )
@@ -201,5 +202,72 @@ func TestAdminSettingsAndTasks(t *testing.T) {
 	}
 	if rec := c.do(http.MethodPost, "/api/admin/tasks/nope", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown task: %d", rec.Code)
+	}
+}
+
+func TestCustomColumns(t *testing.T) {
+	_, sy, h := setup(t)
+	runSync(t, sy)
+	c := login(t, h, "admin", "secret-password")
+
+	var state struct{ Settings settings.Settings }
+	if err := json.Unmarshal(c.do(http.MethodGet, "/api/admin/state", nil).Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	set := state.Settings
+
+	// Preview before saving.
+	rec := c.do(http.MethodPost, "/api/admin/preview-column", map[string]any{"formula": "kills / max(deaths, 1)", "decimals": 1})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"name":"Smith"`) {
+		t.Fatalf("preview: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, "/api/admin/preview-column", map[string]any{"formula": "kills / "})
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"code":"invalid_formula"`) {
+		t.Errorf("invalid preview: %d %s", rec.Code, rec.Body)
+	}
+
+	set.Columns = []report.Column{
+		{Name: "KPM", Formula: "kills / attendance", Decimals: 2, Target: "players"},
+		{Name: "Zero", Formula: "kills / 0", Target: "both"},
+	}
+	rec = c.do(http.MethodPut, "/api/admin/settings", set)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save columns: %d %s", rec.Code, rec.Body)
+	}
+	var saved struct{ Settings settings.Settings }
+	_ = json.Unmarshal(rec.Body.Bytes(), &saved)
+	if len(saved.Settings.Columns) != 2 || saved.Settings.Columns[0].ID == "" {
+		t.Fatalf("saved columns: %+v", saved.Settings.Columns)
+	}
+	kpm, zero := saved.Settings.Columns[0].ID, saved.Settings.Columns[1].ID
+
+	var players struct {
+		Players []struct {
+			Name   string
+			KD     float64
+			Custom map[string]*float64
+		}
+	}
+	get(t, h, "/api/v1/players?sort=custom."+kpm, &players)
+	smith := players.Players[0]
+	if smith.Name != "Smith" || smith.Custom[kpm] == nil || *smith.Custom[kpm] != 3 || smith.Custom[zero] != nil {
+		t.Errorf("custom values: %+v", smith)
+	}
+	if smith.KD != 3 { // 6 kills, 2 deaths
+		t.Errorf("kd = %v, want 3", smith.KD)
+	}
+	if rec := get(t, h, "/api/v1/players?format=csv", nil); !strings.Contains(rec.Body.String(), "KPM") || !strings.Contains(rec.Body.String(), "kill_assists") {
+		t.Errorf("csv without custom columns: %s", rec.Body)
+	}
+	var cfg struct{ Columns []struct{ ID, Name string } }
+	get(t, h, "/api/v1/config", &cfg)
+	if len(cfg.Columns) != 2 {
+		t.Errorf("public config columns: %+v", cfg.Columns)
+	}
+
+	// Unknown variables are rejected when saving.
+	set.Columns = []report.Column{{Name: "Bad", Formula: "kils * 2"}}
+	if rec := c.do(http.MethodPut, "/api/admin/settings", set); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "unknown variable") {
+		t.Errorf("bad formula saved: %d %s", rec.Code, rec.Body)
 	}
 }

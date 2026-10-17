@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/smitt14ua/ocap-statistics/internal/config"
+	"github.com/smitt14ua/ocap-statistics/internal/report"
 	"github.com/smitt14ua/ocap-statistics/internal/stats"
 	"github.com/smitt14ua/ocap-statistics/internal/store"
 )
@@ -34,6 +35,8 @@ type Settings struct {
 	MinDuration float64         `json:"minDuration"`
 	Nickname    stats.Nickname  `json:"nickname"`
 	Rotation    config.Rotation `json:"rotation"`
+	// Columns are custom statistics columns defined in the admin panel.
+	Columns []report.Column `json:"columns"`
 }
 
 // FromConfig builds settings from the config file and environment.
@@ -69,6 +72,9 @@ func (s *Settings) Normalize() (*stats.Rules, error) {
 	}
 	rules, err := stats.NewRules(s.Nickname)
 	if err != nil {
+		return nil, err
+	}
+	if s.Columns, err = report.NormalizeColumns(s.Columns); err != nil {
 		return nil, err
 	}
 	s.Rotation.Since = strings.TrimSpace(s.Rotation.Since)

@@ -112,6 +112,7 @@
       <div class="controls">
         <label class="sr-only" for="period" data-i18n="period.label">Period</label>
         <select id="period">
+          <option value="rotation" id="periodRotation" data-i18n="period.rotation">Current rotation</option>
           <option value="month" data-i18n="period.month">This month</option>
           <option value="prevMonth" data-i18n="period.prevMonth">Last month</option>
           <option value="year" data-i18n="period.year">This year</option>
@@ -163,7 +164,7 @@
                 <td id="totalKills">0</td>
                 <td id="totalDeaths">0</td>
                 <td id="totalTeamKills">0</td>
-                <td colspan="3"></td>
+                <td colspan="4"></td>
                 <td id="summaryKD"></td>
               </tr>
               <tr>
@@ -176,7 +177,8 @@
                 <th scope="col" data-sort="attendance"><button type="button" class="sort" data-i18n="col.attendance">Attendance</button></th>
                 <th scope="col" data-sort="accuracy"><button type="button" class="sort" data-i18n="col.accuracy">Accuracy (%)</button></th>
                 <th scope="col" data-sort="vehiclesDestroyed"><button type="button" class="sort" data-i18n="col.vehicles" data-i18n-title="col.vehicles.title">Veh.</button></th>
-                <th scope="col" data-sort="kdm"><button type="button" class="sort" data-i18n="col.kd" data-i18n-title="col.kd.title">K/D</button></th>
+                <th scope="col" data-sort="killAssists"><button type="button" class="sort" data-i18n="col.assists" data-i18n-title="col.assists.title">Ast.</button></th>
+                <th scope="col" data-sort="kd" id="kdHeader"><button type="button" class="sort" data-i18n="col.kd" data-i18n-title="col.kd.title">K/D</button></th>
               </tr>
             </thead>
             <tbody></tbody>

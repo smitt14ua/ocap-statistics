@@ -12,11 +12,12 @@ OCAP ──(every 10 min: list of recordings)──► ocap-stats ──► SQLi
 ## Features
 
 - **Automatic ingestion.** New recordings are picked up on a schedule; recordings deleted or re-tagged in OCAP disappear from the statistics. Recordings can be read straight from OCAP's data directory when the service runs on the same host.
-- **Statistics:** kills, deaths, team kills, destroyed vehicles, accuracy, attendance, weighted K/D, achievements, squad leaderboard, rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), per-mission details.
+- **Statistics:** kills, deaths, team kills, destroyed vehicles, kill assists (kills by other crew members of your vehicle), accuracy, attendance, K/D, achievements, squad leaderboard, rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), per-mission details.
 - **Squads from nicknames.** `[ALPHA] John` is player `John` in squad `ALPHA`; recruits (`[~ALPHA~] John`) count in their squad like everyone else. The nickname format, squad aliases and ignored names are configurable.
 - **REST API** with OpenAPI documentation at `/api/docs`, CSV export, ETag caching and CORS.
 - **Web page** with filters, player/squad views, Excel export, top-10 and rotation screenshots to the clipboard and links to the replays in OCAP.
-- **Admin panel** (`/admin/`) with user accounts: ingestion status, sync / recompute / full resync / retry tasks, settings, nickname format with a live preview.
+- **Custom columns:** define your own columns with spreadsheet-like formulas in the admin panel (e.g. `round(killAssists / attendance, 2)`); they appear on the site, in the API, CSV and Excel.
+- **Admin panel** (`/admin/`) with user accounts: ingestion status, sync / recompute / full resync / retry tasks, settings, nickname format with a live preview, custom columns with a formula preview.
 - **Localized UI:** English, Czech, German, Polish and Ukrainian, picked from the browser language and switchable manually.
 - **Secure and light by default:** strict Content-Security-Policy, rate-limited admin login, gzip and ETags everywhere, no web fonts or trackers, no third-party code on page load.
 - Single static binary (Go, embedded pure-Go SQLite), multi-arch Docker image (amd64, arm64).
@@ -82,7 +83,7 @@ Statistics settings (tags, start date, minimum duration, nickname format, aliase
 | `admin.password` | `OCAPSTATS_ADMIN_PASSWORD` | — | Its password (at least 8 characters). Without it and without users the admin panel is unusable |
 | `admin.resetPassword` | `OCAPSTATS_ADMIN_PASSWORD_RESET` | `false` | Overwrite the user's password with the configured one on start |
 | `admin.sessionTTL` | `OCAPSTATS_ADMIN_SESSION_TTL` | `168h` | Admin session lifetime |
-| `adminToken` | `OCAPSTATS_ADMIN_TOKEN` | — | Bearer token for `POST /api/v1/sync` and the admin API (scripts, webhooks) |
+| `adminToken` | `OCAPSTATS_ADMIN_TOKEN` | — | Bearer token for `POST /api/v1/sync` (scripts, webhooks) |
 | `sync.enabled` | `OCAPSTATS_SYNC_ENABLED` | `true` | Periodic sync |
 | `sync.interval` | `OCAPSTATS_SYNC_INTERVAL` | `10m` | How often to check OCAP for new recordings |
 | `sync.tags` | `OCAPSTATS_SYNC_TAGS` | all | OCAP tags to ingest (comma-separated, exact match) |
@@ -133,8 +134,8 @@ Common parameters of the statistics endpoints:
 Examples:
 
 ```bash
-# Top 10 players of October by weighted K/D
-curl "http://localhost:5080/api/v1/players?from=2026-10-01&to=2026-10-31&sort=kdm&limit=10"
+# Top 10 players of October by K/D
+curl "http://localhost:5080/api/v1/players?from=2026-10-01&to=2026-10-31&sort=kd&limit=10"
 
 # Members of squad ALPHA as CSV
 curl -o alpha.csv "http://localhost:5080/api/v1/players?squad=ALPHA&format=csv"
@@ -154,10 +155,15 @@ Per mission:
 
 Over a period:
 
-- **Weighted K/D:** `(kills − 2×team kills + 0.5×vehicles) / (deaths + 1) × (0.7 + 0.3 × ln(attendance + 1) / ln(max attendance + 1))`.
+- **K/D:** kills / deaths (kills when there are no deaths).
+- **Kill assist:** a kill (not a team kill) made by another crew member of the vehicle the player sat in at that moment, so drivers and commanders get credit for their gunner's kills. Crews are taken from the vehicle positions in the recording.
 - **Squads:** a player's results count towards the squad they played in during each mission. Squad names are merged case-insensitively and shown in their most common spelling.
-- **Best squad award:** weighted K/D pulled towards the average for squads with few deaths.
+- **Best squad award:** an attendance-weighted K/D pulled towards the average for squads with few deaths.
 - **Rotation:** a rotation side wins a mission when the winner of the `endMission` event names the in-game side (EAST, WEST, …) most of its players were on; any other mission is a draw.
+
+### Custom columns
+
+Formulas use the variables `kills`, `deaths`, `teamKills`, `vehiclesDestroyed`, `killAssists`, `shotsFired`, `hits`, `accuracy`, `kd`, `attendance`, `players`, `squadMissions`, `maxAttendance`, `missions` and `isSquad`; the operators `+ - * / % ^`, comparisons and `&& || !`; and the functions `abs sqrt exp ln log log10 floor ceil round min max pow if`. For squads the statistics are squad totals and `attendance` is the average per player. A division by zero gives an empty value. The admin panel has a full reference and checks formulas against real data before saving.
 
 When the counting rules or the nickname format change, statistics are recomputed from the stored digests without downloading recordings again.
 
@@ -183,6 +189,7 @@ internal/settings   runtime settings (config defaults + admin overrides)
 internal/syncer     task loop: sync, recompute, resync
 internal/auth       admin passwords and sessions
 internal/api        REST API, admin API, caches, static files, security headers, OpenAPI
+internal/formula    formula language of custom columns
 web/static          web page, admin panel, translations (i18n.js), XLSX writer
 ```
 

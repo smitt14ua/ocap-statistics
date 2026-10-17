@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/smitt14ua/ocap-statistics/internal/digest"
@@ -16,7 +17,7 @@ import (
 
 // ComputeVersion changes whenever the per-mission rules below change. Stored missions computed
 // with another version or nickname format are recomputed from their digests.
-const ComputeVersion = 1
+const ComputeVersion = 2
 
 // Victim kinds stored with kills.
 const (
@@ -36,8 +37,10 @@ type PlayerRow struct {
 	Deaths       int    `json:"deaths"`
 	TeamKills    int    `json:"teamKills"`
 	VehicleKills int    `json:"vehiclesDestroyed"`
-	Shots        int    `json:"shotsFired"`
-	Hits         int    `json:"hits"`
+	// KillAssists counts kills made by another crew member of the vehicle the player sat in.
+	KillAssists int `json:"killAssists"`
+	Shots       int `json:"shotsFired"`
+	Hits        int `json:"hits"`
 }
 
 // KillRow is a kill where the killer or the victim is a player.
@@ -170,6 +173,28 @@ func (r *Rules) ValidPlayer(name string) bool {
 	return !r.ignore[l]
 }
 
+// creditAssists gives a kill assist to every other player in the vehicle the killer was in.
+// Crews are recorded per frame, so the frame before the kill is checked too (the killer may
+// have left the vehicle in the same frame).
+func creditAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k digest.Kill, killer *PlayerRow) {
+	for _, frame := range []int{k.Frame, k.Frame - 1} {
+		for _, v := range vehicles {
+			crew := v.CrewAt(frame)
+			if !slices.Contains(crew, k.Killer) {
+				continue
+			}
+			credited := map[*PlayerRow]bool{killer: true}
+			for _, id := range crew {
+				if p := playerOf[id]; p != nil && !credited[p] {
+					p.KillAssists++
+					credited[p] = true
+				}
+			}
+			return
+		}
+	}
+}
+
 // Compute derives per-player statistics for one mission.
 //
 // Rules:
@@ -178,7 +203,9 @@ func (r *Rules) ValidPlayer(name string) bool {
 //     counts as "vehicles destroyed" instead of a kill;
 //   - team kill: a kill where killer and victim (both players) are on the same side;
 //   - death: "killed" event whose victim is a player (suicides included);
-//   - hits: "hit" events by a player on a non-vehicle target; shots: fired frames.
+//   - hits: "hit" events by a player on a non-vehicle target; shots: fired frames;
+//   - kill assist: a kill (not a team kill) made by another crew member of the vehicle the
+//     player was in at that moment (drivers and commanders of the gunner).
 func Compute(d *digest.Digest, rules *Rules) MissionResult {
 	res := MissionResult{Duration: d.Duration()}
 	if d.End != nil {
@@ -232,6 +259,13 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 		return ""
 	}
 
+	var vehicles []*digest.Entity
+	for i := range d.Entities {
+		if len(d.Entities[i].Crew) > 0 {
+			vehicles = append(vehicles, &d.Entities[i])
+		}
+	}
+
 	for _, k := range d.Kills {
 		victimEnt := entities[k.Victim]
 		isVehicle := victimEnt != nil && victimEnt.Type == "vehicle"
@@ -250,6 +284,9 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 				if victim != nil && ks != "" && ks == vs {
 					killer.TeamKills++
 					teamKill = true
+				}
+				if !teamKill {
+					creditAssists(vehicles, playerOf, k, killer)
 				}
 			}
 		}

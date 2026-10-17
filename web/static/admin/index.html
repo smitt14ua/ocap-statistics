@@ -54,6 +54,15 @@
     .side { display: grid; grid-template-columns: 1fr 56px 2fr auto; gap: 8px; align-items: end; margin-bottom: 8px; }
     @media (max-width: 700px) { .side { grid-template-columns: 1fr 56px; } .side > :nth-child(3) { grid-column: 1 / -1; } }
 
+    .column-card { background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+    .column-card .grid { grid-template-columns: 2fr 1fr 1fr; }
+    @media (max-width: 700px) { .column-card .grid { grid-template-columns: 1fr; } }
+    .column-card textarea { min-height: 60px; margin-top: 4px; }
+    .column-card .preview { margin-top: 8px; font-size: 12px; }
+    .column-card .preview table { max-width: 420px; }
+    .help summary { cursor: pointer; color: var(--accent); font-weight: 700; padding: 4px 0; min-height: 24px; }
+    .help .help-title { margin: 16px 0 8px; color: var(--accent); }
+    .examples { list-style: none; display: flex; flex-direction: column; gap: 4px; }
     .login { max-width: 360px; margin: 10vh auto 0; }
     .login form { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
   </style>
@@ -89,6 +98,7 @@
           <button type="button" role="tab" id="t-status" aria-controls="tab-status" aria-selected="true" data-tab="status" class="active" data-i18n="tab.status">Status</button>
           <button type="button" role="tab" id="t-settings" aria-controls="tab-settings" aria-selected="false" tabindex="-1" data-tab="settings" data-i18n="tab.settings">Settings</button>
           <button type="button" role="tab" id="t-nicknames" aria-controls="tab-nicknames" aria-selected="false" tabindex="-1" data-tab="nicknames" data-i18n="tab.nicknames">Nicknames</button>
+          <button type="button" role="tab" id="t-columns" aria-controls="tab-columns" aria-selected="false" tabindex="-1" data-tab="columns" data-i18n="tab.columns">Columns</button>
           <button type="button" role="tab" id="t-access" aria-controls="tab-access" aria-selected="false" tabindex="-1" data-tab="access" data-i18n="tab.access">Access</button>
         </div>
 
@@ -212,6 +222,33 @@
         </section>
 
         <!-- Access -->
+        <section class="tab" id="tab-columns" role="tabpanel" aria-labelledby="t-columns" tabindex="0">
+          <p class="hint" data-i18n="cols.hint"></p>
+          <div id="columns" style="margin-top: 14px;"></div>
+          <div class="row" style="margin-top: 14px;">
+            <button type="button" id="addColumn" class="small" data-i18n="cols.add">+ Add column</button>
+            <span class="spacer"></span>
+            <button type="button" id="saveColumns" class="primary" data-i18n="btn.save">Save</button>
+          </div>
+
+          <details class="help" style="margin-top: 20px;">
+            <summary data-i18n="cols.help">Formula reference</summary>
+            <h2 class="help-title" data-i18n="cols.vars">Variables</h2>
+            <dl class="kv" id="varList"></dl>
+            <h2 class="help-title" data-i18n="cols.funcs">Functions and operators</h2>
+            <p class="mono">+ - * / % ^ &nbsp; ( ) &nbsp; &lt; &lt;= &gt; &gt;= == != &amp;&amp; || ! &nbsp;
+              abs sqrt exp ln log log10 floor ceil round min max pow if</p>
+            <p class="hint" data-i18n="cols.funcsHint"></p>
+            <h2 class="help-title" data-i18n="cols.examples">Examples</h2>
+            <ul class="mono examples">
+              <li>kills / max(deaths, 1)</li>
+              <li>round(killAssists / attendance, 2)</li>
+              <li>if(deaths == 0, kills, kills / deaths)</li>
+              <li>(kills + 0.5 * killAssists) / attendance</li>
+            </ul>
+          </details>
+        </section>
+
         <section class="tab" id="tab-access" role="tabpanel" aria-labelledby="t-access" tabindex="0">
           <h2 data-i18n="users.title">Users</h2>
           <div class="table-wrap" style="margin-top: 10px;">

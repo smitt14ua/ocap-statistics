@@ -14,12 +14,14 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 )
 
 // Version changes when the digest format or extraction changes; old digests are then refetched.
-const Version = 1
+// Version 2 added vehicle crews and the alternative event layout.
+const Version = 2
 
 type Digest struct {
 	Version       int      `json:"v"`
@@ -48,6 +50,25 @@ type Entity struct {
 	Role     string `json:"role,omitempty"`
 	IsPlayer bool   `json:"isPlayer,omitempty"`
 	Shots    int    `json:"shots,omitempty"`
+	// Crew is the crew of a vehicle over time.
+	Crew []CrewSpan `json:"crew,omitempty"`
+}
+
+// CrewSpan is a vehicle crew (entity ids) between two frames, inclusive.
+type CrewSpan struct {
+	From int   `json:"f"`
+	To   int   `json:"t"`
+	IDs  []int `json:"c"`
+}
+
+// CrewAt returns the crew of a vehicle at a frame.
+func (e *Entity) CrewAt(frame int) []int {
+	for _, s := range e.Crew {
+		if frame >= s.From && frame <= s.To {
+			return s.IDs
+		}
+	}
+	return nil
 }
 
 // Kill is a "killed" event. Killer is -1 when the recording has no killer.
@@ -173,17 +194,33 @@ func (d *Digest) addEvent(ev []json.RawMessage) {
 	}
 	switch typ {
 	case "killed", "hit":
-		victim, ok := intOf(arg(2))
-		if !ok {
-			return
+		var victim, source int
+		var weapon string
+		var dist flexNum
+		if _, alt := intOf(arg(3)); alt {
+			// Alternative layout: [frame, type, sourceId, targetId, weapon, distance].
+			var ok bool
+			if victim, ok = intOf(arg(3)); !ok {
+				return
+			}
+			if source, ok = intOf(arg(2)); !ok {
+				source = -1
+			}
+			weapon = stringOf(arg(4))
+			_ = json.Unmarshal(arg(5), &dist)
+		} else {
+			// Extension layout: [frame, type, victimId, [causedById, weapon], distance].
+			var ok bool
+			if victim, ok = intOf(arg(2)); !ok {
+				return
+			}
+			source, weapon = causedBy(arg(3))
+			_ = json.Unmarshal(arg(4), &dist)
 		}
-		source, weapon := causedBy(arg(3))
 		if typ == "hit" {
 			d.Hits = append(d.Hits, Hit{Frame: f, Victim: victim, Shooter: source})
 			return
 		}
-		var dist flexNum
-		_ = json.Unmarshal(arg(4), &dist)
 		d.Kills = append(d.Kills, Kill{Frame: f, Victim: victim, Killer: source, Weapon: weapon, Distance: math.Round(float64(dist)*10) / 10})
 	case "endMission":
 		end := &End{Frame: f}
@@ -221,15 +258,17 @@ func causedBy(raw json.RawMessage) (int, string) {
 }
 
 type rawEntity struct {
-	ID          flexNum  `json:"id"`
-	Name        flexStr  `json:"name"`
-	Group       flexStr  `json:"group"`
-	Side        flexStr  `json:"side"`
-	IsPlayer    flexNum  `json:"isPlayer"`
-	Type        flexStr  `json:"type"`
-	Role        flexStr  `json:"role"`
-	Class       flexStr  `json:"class"`
-	FramesFired arrayLen `json:"framesFired"`
+	ID          flexNum         `json:"id"`
+	Name        flexStr         `json:"name"`
+	Group       flexStr         `json:"group"`
+	Side        flexStr         `json:"side"`
+	IsPlayer    flexNum         `json:"isPlayer"`
+	Type        flexStr         `json:"type"`
+	Role        flexStr         `json:"role"`
+	Class       flexStr         `json:"class"`
+	FramesFired arrayLen        `json:"framesFired"`
+	Positions   json.RawMessage `json:"positions"`
+	StartFrame  flexNum         `json:"startFrameNum"`
 }
 
 func (e rawEntity) entity() Entity {
@@ -243,7 +282,58 @@ func (e rawEntity) entity() Entity {
 		Role:     string(e.Role),
 		IsPlayer: e.IsPlayer == 1,
 		Shots:    int(e.FramesFired),
+		Crew:     vehicleCrew(string(e.Type), e.Positions, int(e.StartFrame)),
 	}
+}
+
+// vehicleCrew extracts the crew timeline of a vehicle from its positions. Each position is
+// [pos, direction, alive, [crew ids], [fromFrame, toFrame]]; recordings without the frame
+// range have one position per frame starting at startFrameNum.
+func vehicleCrew(typ string, positions json.RawMessage, startFrame int) []CrewSpan {
+	if typ != "vehicle" || len(positions) == 0 {
+		return nil
+	}
+	var states []json.RawMessage
+	if json.Unmarshal(positions, &states) != nil {
+		return nil
+	}
+	var spans []CrewSpan
+	for i, raw := range states {
+		var st []json.RawMessage
+		if json.Unmarshal(raw, &st) != nil || len(st) < 4 {
+			continue
+		}
+		var crew []int
+		var ids []json.RawMessage
+		if json.Unmarshal(st[3], &ids) != nil {
+			continue
+		}
+		for _, id := range ids {
+			if v, ok := intOf(id); ok {
+				crew = append(crew, v)
+			}
+		}
+		from, to := startFrame+i, startFrame+i
+		if len(st) > 4 {
+			var fr []json.RawMessage
+			if json.Unmarshal(st[4], &fr) == nil && len(fr) == 2 {
+				a, okA := intOf(fr[0])
+				b, okB := intOf(fr[1])
+				if okA && okB && b >= a {
+					from, to = a, b
+				}
+			}
+		}
+		if n := len(spans); n > 0 && spans[n-1].To+1 >= from && slices.Equal(spans[n-1].IDs, crew) {
+			spans[n-1].To = max(spans[n-1].To, to)
+			continue
+		}
+		if len(crew) == 0 {
+			continue // empty vehicles do not matter for assists
+		}
+		spans = append(spans, CrewSpan{From: from, To: to, IDs: crew})
+	}
+	return spans
 }
 
 // Encode serialises the digest as gzipped JSON for storage.

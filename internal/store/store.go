@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS mission_players (
 	deaths        INTEGER NOT NULL,
 	team_kills    INTEGER NOT NULL,
 	vehicle_kills INTEGER NOT NULL,
+	kill_assists  INTEGER NOT NULL DEFAULT 0,
 	shots         INTEGER NOT NULL,
 	hits          INTEGER NOT NULL,
 	PRIMARY KEY (mission_id, name)
@@ -133,12 +134,41 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 	s := &Store{db: db}
 	s.generation.Store(time.Now().UnixNano())
 	return s, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// migrate brings databases created by older versions up to the current schema.
+func migrate(db *sql.DB) error {
+	cols := map[string]bool{}
+	rows, err := db.Query(`SELECT name FROM pragma_table_info('mission_players')`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			return err
+		}
+		cols[name] = true
+	}
+	rows.Close()
+	if !cols["kill_assists"] {
+		// Older statistics have no assists; ComputeVersion 2 recomputes them from new digests.
+		if _, err := db.Exec(`ALTER TABLE mission_players ADD COLUMN kill_assists INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // Generation identifies the current state of the statistics.
 func (s *Store) Generation() int64 { return s.generation.Load() }
@@ -338,15 +368,15 @@ func writeResult(ctx context.Context, tx *sql.Tx, id int64, computeKey string, r
 		return err
 	}
 	pst, err := tx.PrepareContext(ctx, `INSERT INTO mission_players
-		(mission_id, name, raw_name, squad_raw, squad, side, kills, deaths, team_kills, vehicle_kills, shots, hits)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(mission_id, name, raw_name, squad_raw, squad, side, kills, deaths, team_kills, vehicle_kills, kill_assists, shots, hits)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer pst.Close()
 	for _, p := range res.Players {
 		if _, err := pst.ExecContext(ctx, id, p.Name, p.RawName, p.SquadRaw, p.Squad, p.Side,
-			p.Kills, p.Deaths, p.TeamKills, p.VehicleKills, p.Shots, p.Hits); err != nil {
+			p.Kills, p.Deaths, p.TeamKills, p.VehicleKills, p.KillAssists, p.Shots, p.Hits); err != nil {
 			return err
 		}
 	}
@@ -554,7 +584,7 @@ func (s *Store) Rows(ctx context.Context, f Filter, name string) ([]Row, error) 
 		args = append(args, name)
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT p.mission_id, m.date, p.name, p.raw_name, p.squad_raw, p.squad, p.side,
-		p.kills, p.deaths, p.team_kills, p.vehicle_kills, p.shots, p.hits
+		p.kills, p.deaths, p.team_kills, p.vehicle_kills, p.kill_assists, p.shots, p.hits
 		FROM mission_players p JOIN missions m ON m.id = p.mission_id
 		WHERE `+where+` ORDER BY m.date, m.id`, args...)
 	if err != nil {
@@ -569,7 +599,7 @@ func scanRows(rows *sql.Rows) ([]Row, error) {
 	for rows.Next() {
 		var r Row
 		if err := rows.Scan(&r.MissionID, &r.Date, &r.Name, &r.RawName, &r.SquadRaw, &r.Squad, &r.Side,
-			&r.Kills, &r.Deaths, &r.TeamKills, &r.VehicleKills, &r.Shots, &r.Hits); err != nil {
+			&r.Kills, &r.Deaths, &r.TeamKills, &r.VehicleKills, &r.KillAssists, &r.Shots, &r.Hits); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -580,7 +610,7 @@ func scanRows(rows *sql.Rows) ([]Row, error) {
 // MissionRows returns the player rows of one mission.
 func (s *Store) MissionRows(ctx context.Context, id int64) ([]Row, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT p.mission_id, m.date, p.name, p.raw_name, p.squad_raw, p.squad, p.side,
-		p.kills, p.deaths, p.team_kills, p.vehicle_kills, p.shots, p.hits
+		p.kills, p.deaths, p.team_kills, p.vehicle_kills, p.kill_assists, p.shots, p.hits
 		FROM mission_players p JOIN missions m ON m.id = p.mission_id
 		WHERE p.mission_id = ? ORDER BY p.name`, id)
 	if err != nil {

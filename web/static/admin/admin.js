@@ -186,6 +186,10 @@ class Admin {
         this.afterSave(res);
       } catch (e) { this.handle(e); }
     });
+    $('addColumn').addEventListener('click', () => { this.addColumn({ target: 'both', decimals: 2 }); this.formDirty = true; });
+    $('saveColumns').addEventListener('click', () => this.save());
+    $('columns').addEventListener('input', () => { this.formDirty = true; });
+    this.renderVarList();
     $('addSide').addEventListener('click', () => { this.addSide({ name: '', color: '#888888', squads: [] }); this.formDirty = true; });
 
     $('nPreset').addEventListener('change', () => {
@@ -214,7 +218,9 @@ class Admin {
       if (this.state) { this.renderStatus(); this.renderCustomNote(); }
       if (this.previewRows.length) this.renderPreview();
       if (this.users.length) this.renderUsers();
-      document.querySelectorAll('#sides .side').forEach(row => window.i18n.apply(row));
+      document.querySelectorAll('#sides .side, #columns .column-card').forEach(row => window.i18n.apply(row));
+      this.renderVarList();
+      this.renderColumnsEmpty();
     });
   }
 
@@ -253,6 +259,7 @@ class Admin {
       tile('st.done', m.done),
       tile('st.pending', m.pending),
       tile('st.errors', m.error, m.error ? 'bad' : ''),
+      tile('st.missing', m.missing || 0),
       tile('st.lastSync', rel(s.lastSuccess)));
 
     const taskName = (task) => t(`task.${task}`);
@@ -287,7 +294,8 @@ class Admin {
 
     $('failedBody').replaceChildren(...(failed.length ? failed.map(f => el('tr', {},
       el('td', {}, f.id), el('td', { class: 'mono' }, f.filename), el('td', {}, f.date), el('td', {}, f.attempts),
-      el('td', { class: 'bad' }, f.lastError), el('td', {}, rel(f.nextAttempt))))
+      el('td', { class: f.status === 'missing' ? 'muted' : 'bad' }, f.status === 'missing' ? t('failed.missing') : f.lastError),
+      el('td', {}, f.status === 'missing' ? '—' : rel(f.nextAttempt))))
       : [el('tr', {}, el('td', { colspan: 6, class: 'muted' }, t('failed.none')))]));
   }
 
@@ -315,6 +323,9 @@ class Admin {
     this.syncPreset();
     $('nAliases').value = Object.entries(s.nickname.aliases || {}).map(([k, v]) => `${k} = ${v}`).join('\n');
     $('nIgnore').value = (s.nickname.ignoreNames || []).join('\n');
+    $('columns').replaceChildren();
+    (s.columns || []).forEach(c => this.addColumn(c));
+    this.renderColumnsEmpty();
     this.formDirty = false;
   }
 
@@ -332,6 +343,66 @@ class Admin {
       el('button', { type: 'button', class: 'small danger', 'data-i18n-title': 'side.remove', 'data-i18n-aria': 'side.remove', onclick: () => { row.remove(); this.formDirty = true; } }, '✕'));
     window.i18n.apply(row);
     $('sides').append(row);
+  }
+
+  // --- custom columns ------------------------------------------------------------
+
+  renderColumnsEmpty() {
+    const box = $('columns');
+    box.querySelector('.empty-cols')?.remove();
+    if (!box.querySelector('.column-card')) box.append(el('p', { class: 'muted empty-cols' }, t('cols.empty')));
+  }
+
+  addColumn(col) {
+    const id = `col-${Math.random().toString(36).slice(2, 8)}`;
+    const target = el('select', { 'data-k': 'target', id: `${id}-target` },
+      ['both', 'players', 'squads'].map(v => el('option', { value: v, 'data-i18n': `cols.target.${v}` })));
+    target.value = col.target || 'both';
+    const formula = el('textarea', { 'data-k': 'formula', id: `${id}-formula`, class: 'mono', spellcheck: 'false', rows: 2 });
+    formula.value = col.formula || '';
+    const preview = el('div', { class: 'preview', 'aria-live': 'polite' });
+    const card = el('div', { class: 'column-card', 'data-id': col.id || '' },
+      el('div', { class: 'grid' },
+        el('label', { class: 'field' }, el('span', { 'data-i18n': 'cols.name' }), el('input', { type: 'text', 'data-k': 'name', value: col.name || '', maxlength: 40 })),
+        el('label', { class: 'field' }, el('span', { 'data-i18n': 'cols.target' }), target),
+        el('label', { class: 'field' }, el('span', { 'data-i18n': 'cols.decimals' }), el('input', { type: 'number', 'data-k': 'decimals', min: 0, max: 6, value: col.decimals ?? 2 }))),
+      el('label', { class: 'field', style: 'margin-top:8px' }, el('span', { 'data-i18n': 'cols.formula' }), formula),
+      el('div', { class: 'row', style: 'margin-top:8px' },
+        el('button', { type: 'button', class: 'small', 'data-i18n': 'cols.check', onclick: () => this.previewColumn(card, preview) }),
+        el('span', { class: 'spacer' }),
+        el('button', { type: 'button', class: 'small danger', 'data-i18n': 'cols.remove', onclick: () => { card.remove(); this.formDirty = true; this.renderColumnsEmpty(); } })),
+      preview);
+    window.i18n.apply(card);
+    $('columns').querySelector('.empty-cols')?.remove();
+    $('columns').append(card);
+  }
+
+  columnFrom(card) {
+    return {
+      id: card.dataset.id || '',
+      name: card.querySelector('[data-k=name]').value.trim(),
+      target: card.querySelector('[data-k=target]').value,
+      decimals: Number(card.querySelector('[data-k=decimals]').value || 0),
+      formula: card.querySelector('[data-k=formula]').value.trim(),
+    };
+  }
+
+  async previewColumn(card, box) {
+    const c = this.columnFrom(card);
+    try {
+      const res = await api('POST', 'preview-column', { formula: c.formula, squads: c.target === 'squads', decimals: c.decimals });
+      box.replaceChildren(el('div', { class: 'muted' }, t('cols.previewTitle')),
+        el('table', {}, el('tbody', {}, res.rows.map(r => el('tr', {},
+          el('td', {}, r.name || t('noSquad')), el('td', { class: 'mono' }, r.value === null ? '—' : Number(r.value).toFixed(c.decimals)))))));
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return this.handle(e);
+      box.replaceChildren(el('div', { class: 'bad' }, e instanceof ApiError && e.code === 'invalid_formula' ? t('err.invalid_formula', { msg: e.message }) : e.message));
+    }
+  }
+
+  renderVarList() {
+    const vars = ['kills', 'deaths', 'teamKills', 'vehiclesDestroyed', 'killAssists', 'shotsFired', 'hits', 'accuracy', 'kd', 'attendance', 'players', 'squadMissions', 'maxAttendance', 'missions', 'isSquad'];
+    $('varList').replaceChildren(...vars.flatMap(v => [el('dt', { class: 'mono' }, v), el('dd', {}, t(`var.${v}`))]));
   }
 
   splitList(v, sep = /[,\n]/) {
@@ -356,6 +427,7 @@ class Admin {
       since: $('sSince').value,
       minDuration: Number($('sMinDuration').value || 0) * 60,
       nickname: this.collectNickname(),
+      columns: [...$('columns').querySelectorAll('.column-card')].map(card => this.columnFrom(card)),
       rotation: {
         since: $('sRotationSince').value,
         sides: [...$('sides').children].map(row => ({

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/smitt14ua/ocap-statistics/internal/auth"
+	"github.com/smitt14ua/ocap-statistics/internal/formula"
+	"github.com/smitt14ua/ocap-statistics/internal/report"
 	"github.com/smitt14ua/ocap-statistics/internal/settings"
 	"github.com/smitt14ua/ocap-statistics/internal/stats"
 	"github.com/smitt14ua/ocap-statistics/internal/store"
@@ -39,6 +41,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/admin/settings", s.requireAdmin(s.saveSettings))
 	mux.HandleFunc("DELETE /api/admin/settings", s.requireAdmin(s.resetSettings))
 	mux.HandleFunc("POST /api/admin/preview-names", s.requireAdmin(s.previewNames))
+	mux.HandleFunc("POST /api/admin/preview-column", s.requireAdmin(s.previewColumn))
 	mux.HandleFunc("POST /api/admin/tasks/{task}", s.requireAdmin(s.startTask))
 	mux.HandleFunc("GET /api/admin/users", s.requireAdmin(s.listUsers))
 	mux.HandleFunc("POST /api/admin/users", s.requireAdmin(s.createUser))
@@ -401,6 +404,37 @@ func (s *Server) previewNames(w http.ResponseWriter, r *http.Request) {
 		out = append(out, parsed{raw, name, squadRaw, squad, rules.ValidPlayer(name)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"names": out})
+}
+
+// previewColumn evaluates a formula over all-time statistics of the default tag, for the
+// top players (or squads) by kills.
+func (s *Server) previewColumn(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Formula  string `json:"formula"`
+		Squads   bool   `json:"squads"`
+		Decimals int    `json:"decimals"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	expr, err := report.CompileFormula(req.Formula)
+	if err != nil {
+		var fe *formula.Error
+		pos := -1
+		if errors.As(err, &fe) {
+			pos = fe.Pos
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error(), "code": "invalid_formula", "position": pos})
+		return
+	}
+	set := s.settings.Get()
+	b, err := s.report(r.Context(), store.Filter{From: "0000-01-01", To: "9999-12-31", Tag: set.DefaultTag, MinDuration: set.MinDuration})
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": b.res.Preview(expr, req.Squads, min(max(req.Decimals, 0), 6), 10)})
 }
 
 func (s *Server) startTask(w http.ResponseWriter, r *http.Request) {

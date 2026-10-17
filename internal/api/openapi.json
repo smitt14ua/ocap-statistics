@@ -3,25 +3,44 @@
   "info": {
     "title": "OCAP Statistics API",
     "version": "1.0.0",
-    "description": "Pre-computed player, squad and rotation statistics built from OCAP recordings. The service ingests every recording from OCAP once and answers from its own database.\n\nAll statistics endpoints accept the common filter parameters `from`, `to`, `tag` and `min_duration`. Responses are cached and carry an `ETag`; send `If-None-Match` to get `304 Not Modified` while the data is unchanged.\n\nErrors are returned as `{\"error\": \"human readable message\", \"code\": \"machine_readable_code\"}`."
+    "description": "Pre-computed player, squad and rotation statistics built from OCAP recordings. The service ingests every recording from OCAP once and answers from its own database.\n\nAll statistics endpoints accept the common filter parameters `from`, `to`, `tag` and `min_duration`. Responses are cached and carry an `ETag`; send `If-None-Match` to get `304 Not Modified` while the data is unchanged.\n\nCustom columns are defined by the site administrator with formulas; their values appear in the `custom` object of players and squads, keyed by the column ids listed in `/api/v1/config`.\n\nErrors are returned as `{\"error\": \"human readable message\", \"code\": \"machine_readable_code\"}`."
   },
-  "servers": [{ "url": "/" }],
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
   "tags": [
-    { "name": "Statistics" },
-    { "name": "Missions" },
-    { "name": "Service" },
-    { "name": "Admin", "description": "Admin panel API. Authenticated by the session cookie set by `/api/admin/login` (state-changing requests must also send `X-Requested-With`) or by `Authorization: Bearer <adminToken>`. Not available cross-origin." }
+    {
+      "name": "Statistics"
+    },
+    {
+      "name": "Missions"
+    },
+    {
+      "name": "Service"
+    }
   ],
   "paths": {
     "/api/v1/stats": {
       "get": {
-        "tags": ["Statistics"],
+        "tags": [
+          "Statistics"
+        ],
         "summary": "Everything for a period in one call: totals, players, squads and achievements",
         "parameters": [
-          { "$ref": "#/components/parameters/from" },
-          { "$ref": "#/components/parameters/to" },
-          { "$ref": "#/components/parameters/tag" },
-          { "$ref": "#/components/parameters/min_duration" }
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/tag"
+          },
+          {
+            "$ref": "#/components/parameters/min_duration"
+          }
         ],
         "responses": {
           "200": {
@@ -31,40 +50,93 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "filter": { "$ref": "#/components/schemas/Filter" },
-                    "totals": { "$ref": "#/components/schemas/Totals" },
-                    "players": { "type": "array", "items": { "$ref": "#/components/schemas/Player" } },
-                    "squads": { "type": "array", "items": { "$ref": "#/components/schemas/Squad" } },
-                    "achievements": { "$ref": "#/components/schemas/Achievements" },
-                    "updatedAt": { "type": "string", "format": "date-time" }
+                    "filter": {
+                      "$ref": "#/components/schemas/Filter"
+                    },
+                    "totals": {
+                      "$ref": "#/components/schemas/Totals"
+                    },
+                    "players": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Player"
+                      }
+                    },
+                    "squads": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Squad"
+                      }
+                    },
+                    "achievements": {
+                      "$ref": "#/components/schemas/Achievements"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
                   }
                 }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" }
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
         }
       }
     },
     "/api/v1/players": {
       "get": {
-        "tags": ["Statistics"],
+        "tags": [
+          "Statistics"
+        ],
         "summary": "Player leaderboard",
         "parameters": [
-          { "$ref": "#/components/parameters/from" },
-          { "$ref": "#/components/parameters/to" },
-          { "$ref": "#/components/parameters/tag" },
-          { "$ref": "#/components/parameters/min_duration" },
-          { "name": "search", "in": "query", "schema": { "type": "string" }, "description": "Case-insensitive substring of the player name" },
-          { "$ref": "#/components/parameters/squad" },
           {
-            "name": "sort", "in": "query",
-            "schema": { "type": "string", "default": "kills", "enum": ["kills", "deaths", "teamKills", "vehiclesDestroyed", "attendance", "accuracy", "kd", "kdm", "shotsFired", "hits", "name", "squad"] }
+            "$ref": "#/components/parameters/from"
           },
-          { "$ref": "#/components/parameters/order" },
-          { "$ref": "#/components/parameters/limit" },
-          { "$ref": "#/components/parameters/offset" },
-          { "$ref": "#/components/parameters/format" }
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/tag"
+          },
+          {
+            "$ref": "#/components/parameters/min_duration"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Case-insensitive substring of the player name"
+          },
+          {
+            "$ref": "#/components/parameters/squad"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "kills"
+            },
+            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, accuracy, kd, shotsFired, hits, name, squad or custom.<column id>"
+          },
+          {
+            "$ref": "#/components/parameters/order"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          },
+          {
+            "$ref": "#/components/parameters/format"
+          }
         ],
         "responses": {
           "200": {
@@ -74,30 +146,67 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "filter": { "$ref": "#/components/schemas/Filter" },
-                    "missions": { "type": "integer", "description": "Number of counted missions" },
-                    "total": { "type": "integer", "description": "Number of players before pagination" },
-                    "players": { "type": "array", "items": { "$ref": "#/components/schemas/Player" } }
+                    "filter": {
+                      "$ref": "#/components/schemas/Filter"
+                    },
+                    "missions": {
+                      "type": "integer",
+                      "description": "Number of counted missions"
+                    },
+                    "total": {
+                      "type": "integer",
+                      "description": "Number of players before pagination"
+                    },
+                    "players": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Player"
+                      }
+                    }
                   }
                 }
               },
-              "text/csv": { "schema": { "type": "string" } }
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" }
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
         }
       }
     },
     "/api/v1/players/{name}": {
       "get": {
-        "tags": ["Statistics"],
+        "tags": [
+          "Statistics"
+        ],
         "summary": "Player profile: totals, mission history, weapons, victims and killers",
         "parameters": [
-          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Player name without the squad prefix" },
-          { "$ref": "#/components/parameters/from" },
-          { "$ref": "#/components/parameters/to" },
-          { "$ref": "#/components/parameters/tag" },
-          { "$ref": "#/components/parameters/min_duration" }
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Player name without the squad prefix"
+          },
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/tag"
+          },
+          {
+            "$ref": "#/components/parameters/min_duration"
+          }
         ],
         "responses": {
           "200": {
@@ -107,43 +216,111 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "filter": { "$ref": "#/components/schemas/Filter" },
-                    "player": { "$ref": "#/components/schemas/Player" },
-                    "squads": { "type": "array", "items": { "$ref": "#/components/schemas/Count" }, "description": "Squads the player played in, with mission counts" },
-                    "weapons": { "type": "array", "items": { "$ref": "#/components/schemas/Count" }, "description": "Top 10 weapons by kills" },
-                    "victims": { "type": "array", "items": { "$ref": "#/components/schemas/Count" }, "description": "Players killed most often" },
-                    "killedBy": { "type": "array", "items": { "$ref": "#/components/schemas/Count" }, "description": "Players who killed this player most often" },
-                    "longestKill": { "$ref": "#/components/schemas/Kill" },
-                    "missions": { "type": "array", "items": { "$ref": "#/components/schemas/PlayerMission" } }
+                    "filter": {
+                      "$ref": "#/components/schemas/Filter"
+                    },
+                    "player": {
+                      "$ref": "#/components/schemas/Player"
+                    },
+                    "squads": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Count"
+                      },
+                      "description": "Squads the player played in, with mission counts"
+                    },
+                    "weapons": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Count"
+                      },
+                      "description": "Top 10 weapons by kills"
+                    },
+                    "victims": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Count"
+                      },
+                      "description": "Players killed most often"
+                    },
+                    "killedBy": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Count"
+                      },
+                      "description": "Players who killed this player most often"
+                    },
+                    "longestKill": {
+                      "$ref": "#/components/schemas/Kill"
+                    },
+                    "missions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PlayerMission"
+                      }
+                    }
                   }
                 }
               }
             }
           },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       }
     },
     "/api/v1/squads": {
       "get": {
-        "tags": ["Statistics"],
+        "tags": [
+          "Statistics"
+        ],
         "summary": "Squad leaderboard",
         "description": "A player's results count towards the squad they played in during each mission. Players without a squad are the entry with `name: \"\"`.",
         "parameters": [
-          { "$ref": "#/components/parameters/from" },
-          { "$ref": "#/components/parameters/to" },
-          { "$ref": "#/components/parameters/tag" },
-          { "$ref": "#/components/parameters/min_duration" },
-          { "name": "search", "in": "query", "schema": { "type": "string" } },
-          { "$ref": "#/components/parameters/squad" },
           {
-            "name": "sort", "in": "query",
-            "schema": { "type": "string", "default": "kdm", "enum": ["kills", "deaths", "teamKills", "vehiclesDestroyed", "attendance", "players", "accuracy", "kd", "kdm", "score", "name"] }
+            "$ref": "#/components/parameters/from"
           },
-          { "$ref": "#/components/parameters/order" },
-          { "$ref": "#/components/parameters/limit" },
-          { "$ref": "#/components/parameters/offset" },
-          { "$ref": "#/components/parameters/format" }
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/tag"
+          },
+          {
+            "$ref": "#/components/parameters/min_duration"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/squad"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "kd"
+            },
+            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, players, accuracy, kd, score, name or custom.<column id>"
+          },
+          {
+            "$ref": "#/components/parameters/order"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          },
+          {
+            "$ref": "#/components/parameters/format"
+          }
         ],
         "responses": {
           "200": {
@@ -153,14 +330,29 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "filter": { "$ref": "#/components/schemas/Filter" },
-                    "missions": { "type": "integer" },
-                    "total": { "type": "integer" },
-                    "squads": { "type": "array", "items": { "$ref": "#/components/schemas/Squad" } }
+                    "filter": {
+                      "$ref": "#/components/schemas/Filter"
+                    },
+                    "missions": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "squads": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Squad"
+                      }
+                    }
                   }
                 }
               },
-              "text/csv": { "schema": { "type": "string" } }
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
           }
         }
@@ -168,14 +360,32 @@
     },
     "/api/v1/squads/{name}": {
       "get": {
-        "tags": ["Statistics"],
+        "tags": [
+          "Statistics"
+        ],
         "summary": "A squad and its members (only missions played in this squad)",
         "parameters": [
-          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Squad tag without brackets, e.g. ALPHA. `-` selects players without a squad." },
-          { "$ref": "#/components/parameters/from" },
-          { "$ref": "#/components/parameters/to" },
-          { "$ref": "#/components/parameters/tag" },
-          { "$ref": "#/components/parameters/min_duration" }
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Squad tag without brackets, e.g. ALPHA. `-` selects players without a squad."
+          },
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/tag"
+          },
+          {
+            "$ref": "#/components/parameters/min_duration"
+          }
         ],
         "responses": {
           "200": {
@@ -185,27 +395,48 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "filter": { "$ref": "#/components/schemas/Filter" },
-                    "squad": { "$ref": "#/components/schemas/Squad" },
-                    "members": { "type": "array", "items": { "$ref": "#/components/schemas/Player" } }
+                    "filter": {
+                      "$ref": "#/components/schemas/Filter"
+                    },
+                    "squad": {
+                      "$ref": "#/components/schemas/Squad"
+                    },
+                    "members": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Player"
+                      }
+                    }
                   }
                 }
               }
             }
           },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       }
     },
     "/api/v1/achievements": {
       "get": {
-        "tags": ["Statistics"],
+        "tags": [
+          "Statistics"
+        ],
         "summary": "Achievements of a period",
         "parameters": [
-          { "$ref": "#/components/parameters/from" },
-          { "$ref": "#/components/parameters/to" },
-          { "$ref": "#/components/parameters/tag" },
-          { "$ref": "#/components/parameters/min_duration" }
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/tag"
+          },
+          {
+            "$ref": "#/components/parameters/min_duration"
+          }
         ],
         "responses": {
           "200": {
@@ -215,8 +446,12 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "filter": { "$ref": "#/components/schemas/Filter" },
-                    "achievements": { "$ref": "#/components/schemas/Achievements" }
+                    "filter": {
+                      "$ref": "#/components/schemas/Filter"
+                    },
+                    "achievements": {
+                      "$ref": "#/components/schemas/Achievements"
+                    }
                   }
                 }
               }
@@ -227,14 +462,24 @@
     },
     "/api/v1/rotation": {
       "get": {
-        "tags": ["Statistics"],
+        "tags": [
+          "Statistics"
+        ],
         "summary": "Rotation score and match log",
         "description": "Rotation sides are groups of squads defined in the settings. A side wins a mission when the winner of the `endMission` event names the in-game side (EAST, WEST, ...) most of its players were on; any other mission is a draw.",
         "parameters": [
-          { "$ref": "#/components/parameters/from" },
-          { "$ref": "#/components/parameters/to" },
-          { "$ref": "#/components/parameters/tag" },
-          { "$ref": "#/components/parameters/min_duration" }
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/tag"
+          },
+          {
+            "$ref": "#/components/parameters/min_duration"
+          }
         ],
         "responses": {
           "200": {
@@ -244,8 +489,12 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "filter": { "$ref": "#/components/schemas/Filter" },
-                    "rotation": { "$ref": "#/components/schemas/Rotation" }
+                    "filter": {
+                      "$ref": "#/components/schemas/Filter"
+                    },
+                    "rotation": {
+                      "$ref": "#/components/schemas/Rotation"
+                    }
                   }
                 }
               }
@@ -256,13 +505,23 @@
     },
     "/api/v1/missions": {
       "get": {
-        "tags": ["Missions"],
+        "tags": [
+          "Missions"
+        ],
         "summary": "Processed missions of a period, newest first",
         "parameters": [
-          { "$ref": "#/components/parameters/from" },
-          { "$ref": "#/components/parameters/to" },
-          { "$ref": "#/components/parameters/tag" },
-          { "$ref": "#/components/parameters/min_duration" }
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/tag"
+          },
+          {
+            "$ref": "#/components/parameters/min_duration"
+          }
         ],
         "responses": {
           "200": {
@@ -272,9 +531,18 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "filter": { "$ref": "#/components/schemas/Filter" },
-                    "total": { "type": "integer" },
-                    "missions": { "type": "array", "items": { "$ref": "#/components/schemas/Mission" } }
+                    "filter": {
+                      "$ref": "#/components/schemas/Filter"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "missions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Mission"
+                      }
+                    }
                   }
                 }
               }
@@ -285,10 +553,20 @@
     },
     "/api/v1/missions/{id}": {
       "get": {
-        "tags": ["Missions"],
+        "tags": [
+          "Missions"
+        ],
         "summary": "Statistics of one mission: players, squads and kills",
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "OCAP recording id" }
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "OCAP recording id"
+          }
         ],
         "responses": {
           "200": {
@@ -298,23 +576,47 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "mission": { "$ref": "#/components/schemas/Mission" },
-                    "counted": { "type": "boolean", "description": "Whether the mission counts towards statistics (duration ≥ minDuration)" },
-                    "players": { "type": "array", "items": { "$ref": "#/components/schemas/MissionPlayer" } },
-                    "squads": { "type": "array", "items": { "$ref": "#/components/schemas/Squad" } },
-                    "kills": { "type": "array", "items": { "$ref": "#/components/schemas/Kill" } }
+                    "mission": {
+                      "$ref": "#/components/schemas/Mission"
+                    },
+                    "counted": {
+                      "type": "boolean",
+                      "description": "Whether the mission counts towards statistics (duration ≥ minDuration)"
+                    },
+                    "players": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MissionPlayer"
+                      }
+                    },
+                    "squads": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Squad"
+                      }
+                    },
+                    "kills": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Kill"
+                      }
+                    }
                   }
                 }
               }
             }
           },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       }
     },
     "/api/v1/status": {
       "get": {
-        "tags": ["Service"],
+        "tags": [
+          "Service"
+        ],
         "summary": "Ingestion status",
         "responses": {
           "200": {
@@ -324,12 +626,29 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "missions": { "$ref": "#/components/schemas/Counts" },
-                    "sync": { "$ref": "#/components/schemas/SyncStatus" },
-                    "generation": { "type": "integer", "description": "Changes whenever the statistics change" },
+                    "missions": {
+                      "$ref": "#/components/schemas/Counts"
+                    },
+                    "sync": {
+                      "$ref": "#/components/schemas/SyncStatus"
+                    },
+                    "generation": {
+                      "type": "integer",
+                      "description": "Changes whenever the statistics change"
+                    },
                     "build": {
                       "type": "object",
-                      "properties": { "version": { "type": "string" }, "commit": { "type": "string" }, "date": { "type": "string" } }
+                      "properties": {
+                        "version": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }
@@ -341,287 +660,511 @@
     },
     "/api/v1/config": {
       "get": {
-        "tags": ["Service"],
-        "summary": "Public settings: title, logo, default tag, minimum duration and rotation sides",
-        "responses": { "200": { "description": "OK" } }
+        "tags": [
+          "Service"
+        ],
+        "summary": "Public settings: title, logo, default tag, minimum duration, rotation sides and custom columns",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/api/v1/sync": {
       "post": {
-        "tags": ["Service"],
+        "tags": [
+          "Service"
+        ],
         "summary": "Queue a sync now (requires adminToken)",
-        "security": [{ "bearer": [] }],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "responses": {
-          "202": { "description": "Queued" },
-          "401": { "description": "Wrong token, or adminToken is not configured" }
+          "202": {
+            "description": "Queued"
+          },
+          "401": {
+            "description": "Wrong token, or adminToken is not configured"
+          }
         }
       }
     },
     "/api/v1/health": {
       "get": {
-        "tags": ["Service"],
+        "tags": [
+          "Service"
+        ],
         "summary": "Liveness check",
-        "responses": { "200": { "description": "OK" } }
-      }
-    },
-    "/api/admin/login": {
-      "post": {
-        "tags": ["Admin"],
-        "summary": "Log in and receive a session cookie",
-        "description": "After 10 failed attempts a user name is locked for 15 minutes (`429`, code `too_many_attempts`).",
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "type": "object", "properties": { "username": { "type": "string" }, "password": { "type": "string" } }, "required": ["username", "password"] } } }
-        },
-        "responses": {
-          "200": { "description": "Logged in" },
-          "401": { "description": "Code `invalid_credentials`" },
-          "429": { "description": "Code `too_many_attempts`" }
-        }
-      }
-    },
-    "/api/admin/logout": {
-      "post": { "tags": ["Admin"], "summary": "End the session", "responses": { "204": { "description": "Logged out" } } }
-    },
-    "/api/admin/me": {
-      "get": { "tags": ["Admin"], "summary": "Current user", "responses": { "200": { "description": "OK" }, "401": { "description": "Not logged in" } } }
-    },
-    "/api/admin/state": {
-      "get": {
-        "tags": ["Admin"],
-        "summary": "Ingestion status, failed recordings, current and default settings",
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "user": { "type": "string" },
-                    "missions": { "$ref": "#/components/schemas/Counts" },
-                    "sync": { "$ref": "#/components/schemas/SyncStatus" },
-                    "failed": { "type": "array", "items": { "type": "object" } },
-                    "settings": { "$ref": "#/components/schemas/Settings" },
-                    "defaults": { "$ref": "#/components/schemas/Settings" },
-                    "custom": { "type": "boolean", "description": "Whether settings saved in the admin panel override the configuration" },
-                    "service": { "type": "object" }
-                  }
-                }
-              }
-            }
+            "description": "OK"
           }
         }
-      }
-    },
-    "/api/admin/settings": {
-      "put": {
-        "tags": ["Admin"],
-        "summary": "Save settings",
-        "description": "Changing the nickname format queues a recompute from stored digests; changing tags or `since` queues a sync.",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Settings" } } } },
-        "responses": {
-          "200": { "description": "Saved; `change` tells which tasks were queued" },
-          "400": { "description": "Code `invalid_settings`" }
-        }
-      },
-      "delete": { "tags": ["Admin"], "summary": "Reset settings to the configuration values", "responses": { "200": { "description": "Reset" } } }
-    },
-    "/api/admin/preview-names": {
-      "post": {
-        "tags": ["Admin"],
-        "summary": "Show how nicknames are parsed with a nickname format",
-        "description": "Without `names`, recent nicknames from the database are used.",
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "type": "object", "properties": { "nickname": { "$ref": "#/components/schemas/Nickname" }, "names": { "type": "array", "items": { "type": "string" } } } } } }
-        },
-        "responses": { "200": { "description": "OK" }, "400": { "description": "Code `invalid_settings`" } }
-      }
-    },
-    "/api/admin/tasks/{task}": {
-      "post": {
-        "tags": ["Admin"],
-        "summary": "Queue a task",
-        "parameters": [
-          {
-            "name": "task", "in": "path", "required": true,
-            "schema": { "type": "string", "enum": ["sync", "recompute", "resync", "retry-errors"] },
-            "description": "`sync` – fetch new recordings now; `recompute` – rebuild statistics from stored digests; `resync` – delete everything and process all recordings again; `retry-errors` – retry failed recordings"
-          }
-        ],
-        "responses": { "202": { "description": "Queued" } }
-      }
-    },
-    "/api/admin/users": {
-      "get": { "tags": ["Admin"], "summary": "List users", "responses": { "200": { "description": "OK" } } },
-      "post": {
-        "tags": ["Admin"],
-        "summary": "Create a user",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "username": { "type": "string" }, "password": { "type": "string", "minLength": 8 } } } } } },
-        "responses": { "201": { "description": "Created" }, "400": { "description": "Codes `invalid_username`, `password_too_short`" }, "409": { "description": "Code `user_exists`" } }
-      }
-    },
-    "/api/admin/users/{name}": {
-      "delete": {
-        "tags": ["Admin"],
-        "summary": "Delete a user",
-        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "responses": { "204": { "description": "Deleted" }, "400": { "description": "Codes `cannot_delete_self`, `cannot_delete_last_user`" } }
-      }
-    },
-    "/api/admin/users/{name}/password": {
-      "put": {
-        "tags": ["Admin"],
-        "summary": "Set a user's password (ends that user's sessions)",
-        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "password": { "type": "string", "minLength": 8 } } } } } },
-        "responses": { "204": { "description": "Changed" }, "400": { "description": "Code `password_too_short`" } }
       }
     }
   },
   "components": {
     "securitySchemes": {
-      "bearer": { "type": "http", "scheme": "bearer" }
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
     },
     "parameters": {
-      "from": { "name": "from", "in": "query", "schema": { "type": "string", "format": "date" }, "description": "Start of the period (YYYY-MM-DD, inclusive). Unbounded by default." },
-      "to": { "name": "to", "in": "query", "schema": { "type": "string", "format": "date" }, "description": "End of the period (YYYY-MM-DD, inclusive). Unbounded by default." },
-      "tag": { "name": "tag", "in": "query", "schema": { "type": "string" }, "description": "OCAP mission tag (exact match). Without the parameter the configured default tag is used; `*` selects all tags." },
-      "min_duration": { "name": "min_duration", "in": "query", "schema": { "type": "number" }, "description": "Minimum mission duration in seconds (configured default: 1200 = 20 min)." },
-      "squad": { "name": "squad", "in": "query", "schema": { "type": "string" }, "description": "Comma-separated squads, e.g. `ALPHA,BRAVO`. `-` selects players without a squad." },
-      "order": { "name": "order", "in": "query", "schema": { "type": "string", "enum": ["desc", "asc"], "default": "desc" } },
-      "limit": { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 0 }, "description": "0 means no limit" },
-      "offset": { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0 } },
-      "format": { "name": "format", "in": "query", "schema": { "type": "string", "enum": ["json", "csv"], "default": "json" } }
+      "from": {
+        "name": "from",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "format": "date"
+        },
+        "description": "Start of the period (YYYY-MM-DD, inclusive). Unbounded by default."
+      },
+      "to": {
+        "name": "to",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "format": "date"
+        },
+        "description": "End of the period (YYYY-MM-DD, inclusive). Unbounded by default."
+      },
+      "tag": {
+        "name": "tag",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "OCAP mission tag (exact match). Without the parameter the configured default tag is used; `*` selects all tags."
+      },
+      "min_duration": {
+        "name": "min_duration",
+        "in": "query",
+        "schema": {
+          "type": "number"
+        },
+        "description": "Minimum mission duration in seconds (configured default: 1200 = 20 min)."
+      },
+      "squad": {
+        "name": "squad",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated squads, e.g. `ALPHA,BRAVO`. `-` selects players without a squad."
+      },
+      "order": {
+        "name": "order",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "desc",
+            "asc"
+          ],
+          "default": "desc"
+        }
+      },
+      "limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "description": "0 means no limit"
+      },
+      "offset": {
+        "name": "offset",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "format": {
+        "name": "format",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "json",
+            "csv"
+          ],
+          "default": "json"
+        }
+      }
     },
     "responses": {
-      "BadRequest": { "description": "Invalid parameters", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-      "NotFound": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+      "BadRequest": {
+        "description": "Invalid parameters",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
     },
     "schemas": {
-      "Error": { "type": "object", "properties": { "error": { "type": "string" }, "code": { "type": "string" } } },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
       "Filter": {
         "type": "object",
         "properties": {
-          "from": { "type": "string" },
-          "to": { "type": "string" },
-          "tag": { "type": "string" },
-          "minDuration": { "type": "number" }
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "minDuration": {
+            "type": "number"
+          }
         }
       },
       "Totals": {
         "type": "object",
         "properties": {
-          "missions": { "type": "integer" },
-          "players": { "type": "integer" },
-          "squads": { "type": "integer" },
-          "kills": { "type": "integer" },
-          "deaths": { "type": "integer" },
-          "teamKills": { "type": "integer" },
-          "vehiclesDestroyed": { "type": "integer" }
+          "missions": {
+            "type": "integer"
+          },
+          "players": {
+            "type": "integer"
+          },
+          "squads": {
+            "type": "integer"
+          },
+          "kills": {
+            "type": "integer"
+          },
+          "deaths": {
+            "type": "integer"
+          },
+          "teamKills": {
+            "type": "integer"
+          },
+          "vehiclesDestroyed": {
+            "type": "integer"
+          },
+          "killAssists": {
+            "type": "integer"
+          }
         }
       },
       "Counts": {
         "type": "object",
         "properties": {
-          "total": { "type": "integer" },
-          "done": { "type": "integer" },
-          "pending": { "type": "integer" },
-          "error": { "type": "integer" }
+          "total": {
+            "type": "integer"
+          },
+          "done": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "integer"
+          },
+          "missing": {
+            "type": "integer",
+            "description": "Recordings whose data file OCAP no longer has"
+          }
         }
       },
       "SyncStatus": {
         "type": "object",
         "properties": {
-          "running": { "type": "boolean" },
-          "task": { "type": "string", "enum": ["sync", "recompute", "resync"] },
-          "progress": { "type": "object", "properties": { "done": { "type": "integer" }, "total": { "type": "integer" } } },
-          "queued": { "type": "array", "items": { "type": "string" } },
-          "lastStart": { "type": "string", "format": "date-time" },
-          "lastFinish": { "type": "string", "format": "date-time" },
-          "lastSuccess": { "type": "string", "format": "date-time" },
-          "lastError": { "type": "string" },
-          "lastProcessed": { "type": "integer" },
-          "lastFailed": { "type": "integer" },
-          "nextRun": { "type": "string", "format": "date-time" }
+          "running": {
+            "type": "boolean"
+          },
+          "task": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "recompute",
+              "resync"
+            ]
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "done": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              }
+            }
+          },
+          "queued": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastFinish": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSuccess": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastError": {
+            "type": "string"
+          },
+          "lastProcessed": {
+            "type": "integer"
+          },
+          "lastFailed": {
+            "type": "integer"
+          },
+          "nextRun": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "Player": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "description": "Name without the squad prefix" },
-          "squad": { "type": "string", "description": "Squad of the latest mission with a squad (normalized, aliases applied)" },
-          "squadRaw": { "type": "string", "description": "Squad as captured from the nickname, before aliases" },
-          "kills": { "type": "integer" },
-          "deaths": { "type": "integer" },
-          "teamKills": { "type": "integer" },
-          "vehiclesDestroyed": { "type": "integer" },
-          "shotsFired": { "type": "integer" },
-          "hits": { "type": "integer" },
-          "attendance": { "type": "integer", "description": "Number of missions" },
-          "accuracy": { "type": "number", "description": "hits / shots × 100" },
-          "kd": { "type": "number", "description": "Plain K/D: kills / max(deaths, 1)" },
-          "kdm": { "type": "number", "description": "Weighted K/D: (kills − 2×team kills + 0.5×vehicles) / (deaths + 1) × attendance factor (0.7–1.0)" },
-          "firstSeen": { "type": "string", "format": "date" },
-          "lastSeen": { "type": "string", "format": "date" }
+          "name": {
+            "type": "string",
+            "description": "Name without the squad prefix"
+          },
+          "squad": {
+            "type": "string",
+            "description": "Squad of the latest mission with a squad (normalized, aliases applied)"
+          },
+          "squadRaw": {
+            "type": "string",
+            "description": "Squad as captured from the nickname, before aliases"
+          },
+          "kills": {
+            "type": "integer"
+          },
+          "deaths": {
+            "type": "integer"
+          },
+          "teamKills": {
+            "type": "integer"
+          },
+          "vehiclesDestroyed": {
+            "type": "integer"
+          },
+          "shotsFired": {
+            "type": "integer"
+          },
+          "hits": {
+            "type": "integer"
+          },
+          "attendance": {
+            "type": "integer",
+            "description": "Number of missions"
+          },
+          "accuracy": {
+            "type": "number",
+            "description": "hits / shots × 100"
+          },
+          "kd": {
+            "type": "number",
+            "description": "kills / deaths (kills when there are no deaths)"
+          },
+          "firstSeen": {
+            "type": "string",
+            "format": "date"
+          },
+          "lastSeen": {
+            "type": "string",
+            "format": "date"
+          },
+          "killAssists": {
+            "type": "integer",
+            "description": "Kills made by another crew member of the vehicle the player was in"
+          },
+          "custom": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "nullable": true
+            },
+            "description": "Custom column values by column id (see /api/v1/config); null when undefined, e.g. after a division by zero"
+          }
         }
       },
       "Squad": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "description": "\"\" for players without a squad" },
-          "players": { "type": "integer" },
-          "missions": { "type": "integer" },
-          "attendance": { "type": "integer", "description": "Sum of player-missions" },
-          "avgAttendance": { "type": "number" },
-          "kills": { "type": "integer" },
-          "deaths": { "type": "integer" },
-          "teamKills": { "type": "integer" },
-          "vehiclesDestroyed": { "type": "integer" },
-          "shotsFired": { "type": "integer" },
-          "hits": { "type": "integer" },
-          "accuracy": { "type": "number" },
-          "kd": { "type": "number" },
-          "kdm": { "type": "number" },
-          "score": { "type": "number", "description": "Weighted K/D pulled towards the average for small samples (used for the best-squad award)" }
+          "name": {
+            "type": "string",
+            "description": "\"\" for players without a squad"
+          },
+          "players": {
+            "type": "integer"
+          },
+          "missions": {
+            "type": "integer"
+          },
+          "attendance": {
+            "type": "integer",
+            "description": "Sum of player-missions"
+          },
+          "avgAttendance": {
+            "type": "number"
+          },
+          "kills": {
+            "type": "integer"
+          },
+          "deaths": {
+            "type": "integer"
+          },
+          "teamKills": {
+            "type": "integer"
+          },
+          "vehiclesDestroyed": {
+            "type": "integer"
+          },
+          "shotsFired": {
+            "type": "integer"
+          },
+          "hits": {
+            "type": "integer"
+          },
+          "accuracy": {
+            "type": "number"
+          },
+          "kd": {
+            "type": "number",
+            "description": "kills / deaths (kills when there are no deaths)"
+          },
+          "score": {
+            "type": "number",
+            "description": "Weighted K/D pulled towards the average for small samples (used for the best-squad award)"
+          },
+          "killAssists": {
+            "type": "integer",
+            "description": "Kills made by another crew member of the vehicle the player was in"
+          },
+          "custom": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "nullable": true
+            },
+            "description": "Custom column values by column id (see /api/v1/config); null when undefined, e.g. after a division by zero"
+          }
         }
       },
       "PlayerAward": {
         "type": "object",
         "nullable": true,
         "properties": {
-          "name": { "type": "string" },
-          "squad": { "type": "string" },
-          "squadRaw": { "type": "string" },
-          "value": { "type": "number" }
+          "name": {
+            "type": "string"
+          },
+          "squad": {
+            "type": "string"
+          },
+          "squadRaw": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
         }
       },
       "Achievements": {
         "type": "object",
         "properties": {
-          "topKiller": { "$ref": "#/components/schemas/PlayerAward" },
-          "topTeamKiller": { "$ref": "#/components/schemas/PlayerAward" },
-          "topVehicles": { "$ref": "#/components/schemas/PlayerAward" },
-          "topDeaths": { "$ref": "#/components/schemas/PlayerAward" },
+          "topKiller": {
+            "$ref": "#/components/schemas/PlayerAward"
+          },
+          "topTeamKiller": {
+            "$ref": "#/components/schemas/PlayerAward"
+          },
+          "topVehicles": {
+            "$ref": "#/components/schemas/PlayerAward"
+          },
+          "topDeaths": {
+            "$ref": "#/components/schemas/PlayerAward"
+          },
           "topSquad": {
             "type": "object",
             "nullable": true,
-            "properties": { "name": { "type": "string" }, "kdm": { "type": "number" }, "score": { "type": "number" } }
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "score": {
+                "type": "number"
+              },
+              "kd": {
+                "type": "number"
+              }
+            }
           },
           "longestKill": {
             "type": "object",
             "nullable": true,
             "description": "Longest kill of a soldier with a personal (non-vehicle) weapon",
             "properties": {
-              "name": { "type": "string" },
-              "squad": { "type": "string" },
-              "squadRaw": { "type": "string" },
-              "value": { "type": "number", "description": "Distance in metres" },
-              "victim": { "type": "string" },
-              "weapon": { "type": "string" },
-              "missionId": { "type": "integer" },
-              "date": { "type": "string" }
+              "name": {
+                "type": "string"
+              },
+              "squad": {
+                "type": "string"
+              },
+              "squadRaw": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number",
+                "description": "Distance in metres"
+              },
+              "victim": {
+                "type": "string"
+              },
+              "weapon": {
+                "type": "string"
+              },
+              "missionId": {
+                "type": "integer"
+              },
+              "date": {
+                "type": "string"
+              }
             }
           }
         }
@@ -629,44 +1172,103 @@
       "Mission": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "description": "OCAP recording id" },
-          "filename": { "type": "string" },
-          "name": { "type": "string" },
-          "world": { "type": "string" },
-          "date": { "type": "string", "format": "date" },
-          "tag": { "type": "string" },
-          "author": { "type": "string" },
-          "duration": { "type": "number", "description": "Seconds" },
-          "endSide": { "type": "string", "description": "Winner from the endMission event" },
-          "endMessage": { "type": "string" },
-          "playerCount": { "type": "integer" }
+          "id": {
+            "type": "integer",
+            "description": "OCAP recording id"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "world": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Seconds"
+          },
+          "endSide": {
+            "type": "string",
+            "description": "Winner from the endMission event"
+          },
+          "endMessage": {
+            "type": "string"
+          },
+          "playerCount": {
+            "type": "integer"
+          }
         }
       },
       "MissionPlayer": {
         "type": "object",
         "properties": {
-          "name": { "type": "string" },
-          "squad": { "type": "string" },
-          "squadRaw": { "type": "string" },
-          "side": { "type": "string" },
-          "kills": { "type": "integer" },
-          "deaths": { "type": "integer" },
-          "teamKills": { "type": "integer" },
-          "vehiclesDestroyed": { "type": "integer" },
-          "shotsFired": { "type": "integer" },
-          "hits": { "type": "integer" }
+          "name": {
+            "type": "string"
+          },
+          "squad": {
+            "type": "string"
+          },
+          "squadRaw": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string"
+          },
+          "kills": {
+            "type": "integer"
+          },
+          "deaths": {
+            "type": "integer"
+          },
+          "teamKills": {
+            "type": "integer"
+          },
+          "vehiclesDestroyed": {
+            "type": "integer"
+          },
+          "shotsFired": {
+            "type": "integer"
+          },
+          "hits": {
+            "type": "integer"
+          },
+          "killAssists": {
+            "type": "integer"
+          }
         }
       },
       "PlayerMission": {
         "allOf": [
-          { "$ref": "#/components/schemas/MissionPlayer" },
+          {
+            "$ref": "#/components/schemas/MissionPlayer"
+          },
           {
             "type": "object",
             "properties": {
-              "missionId": { "type": "integer" },
-              "filename": { "type": "string" },
-              "date": { "type": "string" },
-              "world": { "type": "string" }
+              "missionId": {
+                "type": "integer"
+              },
+              "filename": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              },
+              "world": {
+                "type": "string"
+              }
             }
           }
         ]
@@ -675,83 +1277,135 @@
         "type": "object",
         "nullable": true,
         "properties": {
-          "missionId": { "type": "integer" },
-          "date": { "type": "string" },
-          "frame": { "type": "integer" },
-          "killer": { "type": "string" },
-          "killerSquad": { "type": "string" },
-          "killerSide": { "type": "string" },
-          "killerIsPlayer": { "type": "boolean" },
-          "victim": { "type": "string" },
-          "victimSquad": { "type": "string" },
-          "victimSide": { "type": "string" },
-          "victimKind": { "type": "string", "enum": ["player", "ai", "vehicle"] },
-          "vehicleClass": { "type": "string" },
-          "weapon": { "type": "string" },
-          "distance": { "type": "number" },
-          "teamKill": { "type": "boolean" }
+          "missionId": {
+            "type": "integer"
+          },
+          "date": {
+            "type": "string"
+          },
+          "frame": {
+            "type": "integer"
+          },
+          "killer": {
+            "type": "string"
+          },
+          "killerSquad": {
+            "type": "string"
+          },
+          "killerSide": {
+            "type": "string"
+          },
+          "killerIsPlayer": {
+            "type": "boolean"
+          },
+          "victim": {
+            "type": "string"
+          },
+          "victimSquad": {
+            "type": "string"
+          },
+          "victimSide": {
+            "type": "string"
+          },
+          "victimKind": {
+            "type": "string",
+            "enum": [
+              "player",
+              "ai",
+              "vehicle"
+            ]
+          },
+          "vehicleClass": {
+            "type": "string"
+          },
+          "weapon": {
+            "type": "string"
+          },
+          "distance": {
+            "type": "number"
+          },
+          "teamKill": {
+            "type": "boolean"
+          }
         }
       },
       "Count": {
         "type": "object",
-        "properties": { "name": { "type": "string" }, "count": { "type": "integer" } }
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
       },
       "Rotation": {
         "type": "object",
         "properties": {
-          "since": { "type": "string" },
+          "since": {
+            "type": "string"
+          },
           "sides": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "name": { "type": "string" },
-                "color": { "type": "string" },
-                "squads": { "type": "array", "items": { "type": "string" } },
-                "wins": { "type": "integer" }
+                "name": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": "string"
+                },
+                "squads": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "wins": {
+                  "type": "integer"
+                }
               }
             }
           },
-          "draws": { "type": "integer" },
+          "draws": {
+            "type": "integer"
+          },
           "matches": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "missionId": { "type": "integer" },
-                "date": { "type": "string" },
-                "name": { "type": "string" },
-                "world": { "type": "string" },
-                "duration": { "type": "number" },
-                "endSide": { "type": "string" },
-                "winner": { "type": "integer", "description": "Index into sides, or -1 for a draw" },
-                "gameSides": { "type": "array", "items": { "type": "string" } }
+                "missionId": {
+                  "type": "integer"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "world": {
+                  "type": "string"
+                },
+                "duration": {
+                  "type": "number"
+                },
+                "endSide": {
+                  "type": "string"
+                },
+                "winner": {
+                  "type": "integer",
+                  "description": "Index into sides, or -1 for a draw"
+                },
+                "gameSides": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               }
-            }
-          }
-        }
-      },
-      "Nickname": {
-        "type": "object",
-        "properties": {
-          "squadPattern": { "type": "string", "description": "Regular expression; capture group 1 is the squad, the whole match is removed from the name" },
-          "aliases": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Squad spelling (case-insensitive) → squad name" },
-          "ignoreNames": { "type": "array", "items": { "type": "string" } }
-        }
-      },
-      "Settings": {
-        "type": "object",
-        "properties": {
-          "tags": { "type": "array", "items": { "type": "string" }, "description": "Ingested OCAP tags (exact match); empty = all" },
-          "defaultTag": { "type": "string" },
-          "since": { "type": "string", "description": "Ingest recordings from this date (YYYY-MM-DD); empty = all" },
-          "minDuration": { "type": "number", "description": "Seconds" },
-          "nickname": { "$ref": "#/components/schemas/Nickname" },
-          "rotation": {
-            "type": "object",
-            "properties": {
-              "since": { "type": "string" },
-              "sides": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "color": { "type": "string" }, "squads": { "type": "array", "items": { "type": "string" } } } } }
             }
           }
         }

@@ -78,7 +78,9 @@ func (s *Server) report(ctx context.Context, f store.Filter) (built, error) {
 		if err != nil {
 			return built{}, err
 		}
-		return built{res: report.Build(missions, rows), longest: longest}, nil
+		res := report.Build(missions, rows)
+		res.ApplyColumns(s.settings.Get().Columns)
+		return built{res: res, longest: longest}, nil
 	})
 }
 
@@ -169,6 +171,41 @@ func csvResponse(filename string, header []string, rows [][]string) (response, e
 	return response{contentType: "text/csv; charset=utf-8", body: buf.Bytes(), filename: filename}, w.Error()
 }
 
+// publicColumn is a custom column as published to the web page and API clients.
+type publicColumn struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Formula  string `json:"formula"`
+	Decimals int    `json:"decimals"`
+	Target   string `json:"target"`
+}
+
+func publicColumns(cols []report.Column) []publicColumn {
+	out := make([]publicColumn, 0, len(cols))
+	for _, c := range cols {
+		out = append(out, publicColumn{ID: c.ID, Name: c.Name, Formula: c.Formula, Decimals: c.Decimals, Target: c.Target})
+	}
+	return out
+}
+
+// withCustomCSV appends custom columns (except those for the excluded target) to a CSV.
+func (s *Server) withCustomCSV(header []string, rows [][]string, exclude string, custom func(int) map[string]*float64) ([]string, [][]string) {
+	for _, c := range s.settings.Get().Columns {
+		if c.Target == exclude {
+			continue
+		}
+		header = append(header, c.Name)
+		for i := range rows {
+			v := ""
+			if p := custom(i)[c.ID]; p != nil {
+				v = ff(*p)
+			}
+			rows[i] = append(rows[i], v)
+		}
+	}
+	return header, rows
+}
+
 func ff(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
 func fi(v int) string     { return strconv.Itoa(v) }
 
@@ -206,6 +243,7 @@ func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) {
 		"logoUrl":     s.cfg.UI.LogoURL,
 		"ocapUrl":     s.cfg.UI.OCAPURL,
 		"defaultTag":  set.DefaultTag,
+		"columns":     publicColumns(set.Columns),
 		"minDuration": set.MinDuration,
 		"rotation":    set.Rotation,
 	})
@@ -286,6 +324,7 @@ func (s *Server) mission(r *http.Request) (response, error) {
 		Deaths            int    `json:"deaths"`
 		TeamKills         int    `json:"teamKills"`
 		VehiclesDestroyed int    `json:"vehiclesDestroyed"`
+		KillAssists       int    `json:"killAssists"`
 		ShotsFired        int    `json:"shotsFired"`
 		Hits              int    `json:"hits"`
 	}
@@ -294,7 +333,7 @@ func (s *Server) mission(r *http.Request) (response, error) {
 		players = append(players, missionPlayer{
 			Name: row.Name, Squad: row.Squad, SquadRaw: row.SquadRaw, Side: row.Side,
 			Kills: row.Kills, Deaths: row.Deaths, TeamKills: row.TeamKills, VehiclesDestroyed: row.VehicleKills,
-			ShotsFired: row.Shots, Hits: row.Hits,
+			KillAssists: row.KillAssists, ShotsFired: row.Shots, Hits: row.Hits,
 		})
 	}
 	return jsonResponse(map[string]any{
@@ -333,9 +372,11 @@ func (s *Server) players(r *http.Request) (response, error) {
 		rows := make([][]string, 0, len(list))
 		for i, pl := range list {
 			rows = append(rows, []string{fi(p.offset + i + 1), pl.Name, pl.SquadRaw, fi(pl.Kills), fi(pl.Deaths), fi(pl.TeamKills),
-				fi(pl.Attendance), ff(pl.Accuracy), fi(pl.VehiclesDestroyed), ff(pl.KDM)})
+				fi(pl.Attendance), ff(pl.Accuracy), fi(pl.VehiclesDestroyed), fi(pl.KillAssists), ff(pl.KD)})
 		}
-		return csvResponse("players.csv", []string{"rank", "name", "squad", "kills", "deaths", "team_kills", "attendance", "accuracy", "vehicles_destroyed", "kd_weighted"}, rows)
+		header := []string{"rank", "name", "squad", "kills", "deaths", "team_kills", "attendance", "accuracy", "vehicles_destroyed", "kill_assists", "kd"}
+		header, rows = s.withCustomCSV(header, rows, report.TargetSquads, func(i int) map[string]*float64 { return list[i].Custom })
+		return csvResponse("players.csv", header, rows)
 	}
 	return jsonResponse(map[string]any{"filter": outFilter(f), "missions": len(b.res.Missions), "total": total, "players": list})
 }
@@ -353,6 +394,7 @@ type missionRow struct {
 	Deaths            int    `json:"deaths"`
 	TeamKills         int    `json:"teamKills"`
 	VehiclesDestroyed int    `json:"vehiclesDestroyed"`
+	KillAssists       int    `json:"killAssists"`
 	ShotsFired        int    `json:"shotsFired"`
 	Hits              int    `json:"hits"`
 }
@@ -395,7 +437,7 @@ func (s *Server) player(r *http.Request) (response, error) {
 			MissionID: row.MissionID, Filename: m.Filename, Date: row.Date, Name: m.Name, World: m.World,
 			Squad: res.SquadName(row.Squad), SquadRaw: row.SquadRaw, Side: row.Side,
 			Kills: row.Kills, Deaths: row.Deaths, TeamKills: row.TeamKills, VehiclesDestroyed: row.VehicleKills,
-			ShotsFired: row.Shots, Hits: row.Hits,
+			KillAssists: row.KillAssists, ShotsFired: row.Shots, Hits: row.Hits,
 		})
 		squadCount.add(res.SquadName(row.Squad))
 	}
@@ -462,7 +504,7 @@ func (s *Server) squads(r *http.Request) (response, error) {
 	if err != nil {
 		return response{}, err
 	}
-	p, err := parseList(r, "kdm")
+	p, err := parseList(r, "kd")
 	if err != nil {
 		return response{}, err
 	}
@@ -491,9 +533,11 @@ func (s *Server) squads(r *http.Request) (response, error) {
 				name = report.NoSquad
 			}
 			rows = append(rows, []string{fi(p.offset + i + 1), name, fi(sq.Players), fi(sq.Kills), fi(sq.Deaths), fi(sq.TeamKills),
-				ff(sq.AvgAttendance), ff(sq.Accuracy), fi(sq.VehiclesDestroyed), ff(sq.KDM)})
+				ff(sq.AvgAttendance), ff(sq.Accuracy), fi(sq.VehiclesDestroyed), fi(sq.KillAssists), ff(sq.KD)})
 		}
-		return csvResponse("squads.csv", []string{"rank", "squad", "players", "kills", "deaths", "team_kills", "avg_attendance", "accuracy", "vehicles_destroyed", "kd_weighted"}, rows)
+		header := []string{"rank", "squad", "players", "kills", "deaths", "team_kills", "avg_attendance", "accuracy", "vehicles_destroyed", "kill_assists", "kd"}
+		header, rows = s.withCustomCSV(header, rows, report.TargetPlayers, func(i int) map[string]*float64 { return list[i].Custom })
+		return csvResponse("squads.csv", header, rows)
 	}
 	return jsonResponse(map[string]any{"filter": outFilter(f), "missions": len(b.res.Missions), "total": total, "squads": list})
 }
@@ -511,7 +555,7 @@ func (s *Server) squad(r *http.Request) (response, error) {
 	if !ok {
 		return response{}, notFound("squad")
 	}
-	members := b.res.SquadMembers(sq.Name)
+	members := b.res.SquadMembers(sq.Name, s.settings.Get().Columns)
 	report.SortPlayers(members, "kills", true)
 	return jsonResponse(map[string]any{"filter": outFilter(f), "squad": sq, "members": nonNil(members)})
 }

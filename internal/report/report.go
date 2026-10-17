@@ -23,14 +23,16 @@ type Player struct {
 	Deaths            int     `json:"deaths"`
 	TeamKills         int     `json:"teamKills"`
 	VehiclesDestroyed int     `json:"vehiclesDestroyed"`
+	KillAssists       int     `json:"killAssists"`
 	ShotsFired        int     `json:"shotsFired"`
 	Hits              int     `json:"hits"`
 	Attendance        int     `json:"attendance"`
 	Accuracy          float64 `json:"accuracy"`
-	KD                float64 `json:"kd"`
-	KDM               float64 `json:"kdm"`
+	KD                float64 `json:"kd"` // kills / deaths (kills when there are no deaths)
 	FirstSeen         string  `json:"firstSeen"`
 	LastSeen          string  `json:"lastSeen"`
+	// Custom holds custom column values by column id (null when undefined, e.g. x/0).
+	Custom map[string]*float64 `json:"custom,omitempty"`
 }
 
 type Squad struct {
@@ -43,12 +45,14 @@ type Squad struct {
 	Deaths            int     `json:"deaths"`
 	TeamKills         int     `json:"teamKills"`
 	VehiclesDestroyed int     `json:"vehiclesDestroyed"`
+	KillAssists       int     `json:"killAssists"`
 	ShotsFired        int     `json:"shotsFired"`
 	Hits              int     `json:"hits"`
 	Accuracy          float64 `json:"accuracy"`
 	KD                float64 `json:"kd"`
-	KDM               float64 `json:"kdm"`
 	Score             float64 `json:"score"` // confidence-weighted K/D used for the "best squad" award
+	// Custom holds custom column values by column id.
+	Custom map[string]*float64 `json:"custom,omitempty"`
 }
 
 // Totals sums all players.
@@ -60,6 +64,7 @@ type Totals struct {
 	Deaths            int `json:"deaths"`
 	TeamKills         int `json:"teamKills"`
 	VehiclesDestroyed int `json:"vehiclesDestroyed"`
+	KillAssists       int `json:"killAssists"`
 }
 
 // Result is the full aggregation for a filter.
@@ -95,6 +100,7 @@ func Build(missions []store.Mission, rows []store.Row) *Result {
 		p.Deaths += row.Deaths
 		p.TeamKills += row.TeamKills
 		p.VehiclesDestroyed += row.VehicleKills
+		p.KillAssists += row.KillAssists
 		p.ShotsFired += row.Shots
 		p.Hits += row.Hits
 		a.missions[row.MissionID] = true
@@ -115,12 +121,12 @@ func Build(missions []store.Mission, rows []store.Row) *Result {
 		p := byName[name].p
 		p.Accuracy = accuracy(p.Hits, p.ShotsFired)
 		p.KD = round2(float64(p.Kills) / float64(max(p.Deaths, 1)))
-		p.KDM = round2(kdm(p.Kills, p.Deaths, p.TeamKills, p.VehiclesDestroyed, float64(p.Attendance), float64(maxAtt)))
 		r.Players = append(r.Players, *p)
 		r.Totals.Kills += p.Kills
 		r.Totals.Deaths += p.Deaths
 		r.Totals.TeamKills += p.TeamKills
 		r.Totals.VehiclesDestroyed += p.VehiclesDestroyed
+		r.Totals.KillAssists += p.KillAssists
 	}
 	slices.SortFunc(r.Players, func(a, b Player) int { return strings.Compare(a.Name, b.Name) })
 
@@ -196,6 +202,7 @@ func (r *Result) buildSquads(rows []store.Row, only func(string) bool) []Squad {
 		s.Deaths += row.Deaths
 		s.TeamKills += row.TeamKills
 		s.VehiclesDestroyed += row.VehicleKills
+		s.KillAssists += row.KillAssists
 		s.ShotsFired += row.Shots
 		s.Hits += row.Hits
 		s.Attendance++
@@ -213,7 +220,6 @@ func (r *Result) buildSquads(rows []store.Row, only func(string) bool) []Squad {
 		s.AvgAttendance = round2(avg)
 		s.Accuracy = accuracy(s.Hits, s.ShotsFired)
 		s.KD = round2(float64(s.Kills) / float64(max(s.Deaths, 1)))
-		s.KDM = round2(kdm(s.Kills, s.Deaths, s.TeamKills, s.VehiclesDestroyed, math.Max(s.AvgAttendance, 1), totalMissions))
 		out = append(out, *s)
 	}
 
@@ -249,8 +255,8 @@ func (r *Result) buildSquads(rows []store.Row, only func(string) bool) []Squad {
 }
 
 // SquadMembers returns statistics of players counting only missions played in the squad
-// ("" = without a squad).
-func (r *Result) SquadMembers(squad string) []Player {
+// ("" = without a squad), with custom columns.
+func (r *Result) SquadMembers(squad string, cols []Column) []Player {
 	var rows []store.Row
 	for _, row := range r.rows {
 		if strings.EqualFold(r.SquadName(row.Squad), squad) {
@@ -258,6 +264,7 @@ func (r *Result) SquadMembers(squad string) []Player {
 		}
 	}
 	sub := Build(r.Missions, rows)
+	sub.ApplyColumns(cols)
 	return sub.Players
 }
 
@@ -289,14 +296,6 @@ func attendanceMultiplier(att, maxAtt float64) float64 {
 	return 0.7 + 0.3*(math.Log(att+1)/math.Log(maxAtt+1))
 }
 
-// kdm is the weighted K/D: net kills over deaths+1 (Laplace smoothing), scaled by attendance.
-func kdm(kills, deaths, teamKills, vehicles int, att, maxAtt float64) float64 {
-	if att <= 0 {
-		att = 1
-	}
-	return netKills(kills, teamKills, vehicles) / float64(deaths+1) * attendanceMultiplier(att, maxAtt)
-}
-
 func accuracy(hits, shots int) float64 {
 	if shots <= 0 {
 		return 0
@@ -313,7 +312,7 @@ func round2(v float64) float64 {
 
 // --- sorting -----------------------------------------------------------------
 
-// SortPlayers sorts by a field name used in the API ("kills", "kdm", ...).
+// SortPlayers sorts by a field name used in the API ("kills", "kd", "custom.<id>", ...).
 func SortPlayers(ps []Player, field string, desc bool) {
 	key := func(p Player) float64 {
 		switch field {
@@ -329,8 +328,8 @@ func SortPlayers(ps []Player, field string, desc bool) {
 			return p.Accuracy
 		case "kd":
 			return p.KD
-		case "kdm":
-			return p.KDM
+		case "killAssists":
+			return float64(p.KillAssists)
 		case "shotsFired":
 			return float64(p.ShotsFired)
 		case "hits":
@@ -347,7 +346,11 @@ func SortPlayers(ps []Player, field string, desc bool) {
 		case "squad":
 			c = cmp.Compare(strings.ToLower(a.SquadRaw), strings.ToLower(b.SquadRaw))
 		default:
-			c = cmp.Compare(key(a), key(b))
+			if id, ok := strings.CutPrefix(field, "custom."); ok {
+				c = compareCustom(a.Custom, b.Custom, id)
+			} else {
+				c = cmp.Compare(key(a), key(b))
+			}
 		}
 		if desc {
 			c = -c
@@ -377,8 +380,8 @@ func SortSquads(ss []Squad, field string, desc bool) {
 			return s.Accuracy
 		case "kd":
 			return s.KD
-		case "kdm":
-			return s.KDM
+		case "killAssists":
+			return float64(s.KillAssists)
 		case "score":
 			return s.Score
 		default:
@@ -389,6 +392,8 @@ func SortSquads(ss []Squad, field string, desc bool) {
 		var c int
 		if field == "name" {
 			c = cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		} else if id, ok := strings.CutPrefix(field, "custom."); ok {
+			c = compareCustom(a.Custom, b.Custom, id)
 		} else {
 			c = cmp.Compare(key(a), key(b))
 		}
@@ -413,7 +418,7 @@ type PlayerAward struct {
 
 type SquadAward struct {
 	Name  string  `json:"name"`
-	KDM   float64 `json:"kdm"`
+	KD    float64 `json:"kd"`
 	Score float64 `json:"score"`
 }
 
@@ -456,7 +461,7 @@ func (r *Result) Achievements(longest *store.Kill) Achievements {
 		if p.Deaths == 0 {
 			continue
 		}
-		if topDeaths == nil || p.Deaths > topDeaths.Deaths || (p.Deaths == topDeaths.Deaths && p.KDM < topDeaths.KDM) {
+		if topDeaths == nil || p.Deaths > topDeaths.Deaths || (p.Deaths == topDeaths.Deaths && p.KD < topDeaths.KD) {
 			topDeaths = &r.Players[i]
 		}
 	}
@@ -465,7 +470,7 @@ func (r *Result) Achievements(longest *store.Kill) Achievements {
 	}
 	for _, s := range r.Squads {
 		if s.Name != "" && (a.TopSquad == nil || s.Score > a.TopSquad.Score) {
-			a.TopSquad = &SquadAward{Name: s.Name, KDM: s.KDM, Score: s.Score}
+			a.TopSquad = &SquadAward{Name: s.Name, KD: s.KD, Score: s.Score}
 		}
 	}
 	if k := longest; k != nil {

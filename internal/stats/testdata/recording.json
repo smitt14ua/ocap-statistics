@@ -10,6 +10,8 @@
     {"id": 3, "name": "HC", "side": "CIV", "isPlayer": 1, "type": "unit", "positions": [], "framesFired": []},
     {"id": 4, "name": "Rifleman", "side": "EAST", "isPlayer": 0, "type": "unit", "positions": [], "framesFired": []},
     {"id": 5, "name": "T-72", "side": "EAST", "isPlayer": 0, "type": "vehicle", "class": "tank", "positions": [], "framesFired": []},
+    {"id": 7, "name": "M1A2", "side": "WEST", "isPlayer": 0, "type": "vehicle", "class": "tank", "startFrameNum": 0, "framesFired": [],
+     "positions": [[[1, 2, 3], 0, 1, [], [0, 99]], [[1, 2, 3], 0, 1, [0, 1], [100, 150]], [[1, 2, 3], 0, 1, [0], [151, 300]]]},
     {"id": 6, "name": "[MILF] Smith", "side": "WEST", "isPlayer": 1, "type": "unit", "positions": [], "framesFired": [[20, [1, 2]]]}
   ],
   "events": [

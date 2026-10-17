@@ -72,7 +72,7 @@ class StatsApp {
     this.selected = new Set();
     this.singles = true;
     this.table = $('statsTable');
-    this.headers = this.table.querySelectorAll('th[data-sort]');
+
     this.lastFocus = null;
   }
 
@@ -87,12 +87,14 @@ class StatsApp {
     if (this.cfg.logoUrl) $('logoSlot').replaceWith(el('img', { src: this.cfg.logoUrl, alt: '', class: 'logo' }));
 
     const params = new URLSearchParams(location.search);
+    // Without a configured rotation the "current rotation" period does not exist.
+    if (!this.rotationSince()) $('periodRotation').remove();
     if (params.get('from') || params.get('to')) {
       $('from').value = params.get('from') || '';
       $('to').value = params.get('to') || '';
       $('period').value = 'custom';
     } else {
-      this.applyPeriod(params.get('period') || 'month');
+      this.applyPeriod(params.get('period') || this.defaultPeriod());
     }
     this.setView(params.get('view') === 'squads' ? 'squads' : 'players', false);
     await this.load();
@@ -109,13 +111,15 @@ class StatsApp {
     for (const id of ['from', 'to']) $(id).addEventListener('change', () => { $('period').value = 'custom'; });
     let debounce;
     $('search').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => this.render(), 200); });
-    this.headers.forEach(th => th.querySelector('button').addEventListener('click', () => {
+    this.table.querySelector('thead').addEventListener('click', (e) => {
+      const th = e.target.closest('th[data-sort]');
+      if (!th || !e.target.closest('button')) return;
       const field = th.dataset.sort;
       if (this.viewMode === 'squads' && field === 'squad') return;
       if (field === this.sort.field) this.sort.dir = this.sort.dir === 'asc' ? 'desc' : 'asc';
       else this.sort = { field, dir: ['name', 'squad'].includes(field) ? 'asc' : 'desc' };
       this.render();
-    }));
+    });
     $('viewPlayers').addEventListener('click', () => this.setView('players'));
     $('viewSquads').addEventListener('click', () => this.setView('squads'));
     $('exportExcel').addEventListener('click', () => this.exportExcel());
@@ -139,6 +143,16 @@ class StatsApp {
     });
   }
 
+  // rotationSince is the start of the current rotation from the settings, if any.
+  rotationSince() {
+    return (this.cfg.rotation && this.cfg.rotation.since) || '';
+  }
+
+  // defaultPeriod is the current rotation when one is configured, otherwise this month.
+  defaultPeriod() {
+    return this.rotationSince() ? 'rotation' : 'month';
+  }
+
   applyPeriod(period) {
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
@@ -147,8 +161,15 @@ class StatsApp {
       prevMonth: [new Date(y, m - 1, 1), new Date(y, m, 0)],
       year: [new Date(y, 0, 1), new Date(y, 11, 31)],
     };
+    if (period === 'rotation' && this.rotationSince()) {
+      $('period').value = 'rotation';
+      $('from').value = this.rotationSince();
+      $('to').value = '';
+      return;
+    }
+    if (!ranges[period] && period !== 'all') period = 'month';
     const r = ranges[period];
-    $('period').value = ranges[period] || period === 'all' ? period : 'month';
+    $('period').value = period;
     $('from').value = r ? isoDate(r[0]) : '';
     $('to').value = r ? isoDate(r[1]) : '';
   }
@@ -172,7 +193,7 @@ class StatsApp {
     if (period === 'custom') {
       if ($('from').value) url.searchParams.set('from', $('from').value);
       if ($('to').value) url.searchParams.set('to', $('to').value);
-    } else if (period !== 'month') {
+    } else if (period !== this.defaultPeriod()) {
       url.searchParams.set('period', period);
     }
     if (this.viewMode === 'squads') url.searchParams.set('view', 'squads');
@@ -234,13 +255,32 @@ class StatsApp {
     this.viewMode = mode;
     $('viewPlayers').classList.toggle('active', mode === 'players');
     $('viewSquads').classList.toggle('active', mode === 'squads');
-    if (mode === 'squads' && this.sort.field === 'squad') this.sort = { field: 'kdm', dir: 'desc' };
+    if (mode === 'squads' && this.sort.field === 'squad') this.sort = { field: 'kd', dir: 'desc' };
+    if (this.sort.field.startsWith('custom.') && !this.columns(mode === 'squads').some(c => `custom.${c.id}` === this.sort.field)) {
+      this.sort = { field: 'kills', dir: 'desc' };
+    }
     this.renderHeaders();
     if (update) { this.updateURL(); this.render(); }
   }
 
+  // columns returns the custom columns shown in the players or squads view.
+  columns(squads) {
+    return (this.cfg.columns || []).filter(c => c.target === 'both' || c.target === (squads ? 'squads' : 'players'));
+  }
+
+  customValue(x, c) {
+    const v = x.custom ? x.custom[c.id] : null;
+    return v === null || v === undefined ? '—' : Number(v).toFixed(c.decimals);
+  }
+
   renderHeaders() {
     const squads = this.viewMode === 'squads';
+    // Custom columns follow K/D; the summary row gets one empty cell spanning them.
+    this.table.querySelectorAll('.custom-col').forEach(n => n.remove());
+    const cols = this.columns(squads);
+    $('kdHeader').after(...cols.map(c => el('th', { scope: 'col', class: 'custom-col', 'data-sort': `custom.${c.id}` },
+      el('button', { type: 'button', class: 'sort', title: c.formula }, c.name))));
+    if (cols.length) $('summaryKD').after(el('td', { class: 'custom-col', colspan: cols.length }));
     $('nameHeader').textContent = t(squads ? 'col.squad' : 'col.name');
     $('squadHeader').textContent = t(squads ? 'col.players' : 'col.squad');
     const ph = t(squads ? 'filters.searchSquads' : 'filters.searchPlayers');
@@ -310,6 +350,10 @@ class StatsApp {
       if (field === 'name') return (x.name || '').toLowerCase();
       if (field === 'squad') return (x.squadRaw || '').toLowerCase();
       if (field === 'attendance' && squads) return x.avgAttendance;
+      if (field.startsWith('custom.')) {
+        const v = x.custom ? x.custom[field.slice(7)] : null;
+        return v === null || v === undefined ? -Infinity : v;
+      }
       return x[field] ?? 0;
     };
     return list.sort((a, b) => {
@@ -325,12 +369,13 @@ class StatsApp {
       squads ? x.players : (x.squadRaw || '-'),
       x.kills, x.deaths, x.teamKills,
       squads ? fmt(x.avgAttendance) : x.attendance,
-      fmt(x.accuracy) + '%', x.vehiclesDestroyed, fmt(x.kdm),
+      fmt(x.accuracy) + '%', x.vehiclesDestroyed, x.killAssists, fmt(x.kd),
+      ...this.columns(squads).map(c => this.customValue(x, c)),
     ];
   }
 
   render() {
-    this.headers.forEach(th => {
+    this.table.querySelectorAll('th[data-sort]').forEach(th => {
       if (th.dataset.sort === this.sort.field) th.setAttribute('aria-sort', this.sort.dir === 'asc' ? 'ascending' : 'descending');
       else th.removeAttribute('aria-sort');
     });
@@ -339,7 +384,9 @@ class StatsApp {
     $('totalKills').textContent = items.reduce((s, x) => s + x.kills, 0);
     $('totalDeaths').textContent = items.reduce((s, x) => s + x.deaths, 0);
     $('totalTeamKills').textContent = items.reduce((s, x) => s + x.teamKills, 0);
-    $('summaryKD').textContent = this.filtered() && items.length ? fmt(items.reduce((s, x) => s + x.kdm, 0) / items.length) : '';
+    // K/D of the visible rows together: their kills over their deaths.
+    const deaths = items.reduce((s, x) => s + x.deaths, 0);
+    $('summaryKD').textContent = items.length ? fmt(items.reduce((s, x) => s + x.kills, 0) / Math.max(deaths, 1)) : '';
 
     const rows = items.map((x, i) => {
       const open = () => squads ? this.openSquad(x.name) : this.openPlayer(x.name);
@@ -353,7 +400,9 @@ class StatsApp {
       tr.addEventListener('click', open);
       return tr;
     });
-    if (!rows.length) rows.push(el('tr', {}, el('td', { colspan: 10, class: 'muted' }, this.data ? t('table.empty') : t('status.loading'))));
+    if (!rows.length) {
+      rows.push(el('tr', {}, el('td', { colspan: 11 + this.columns(squads).length, class: 'muted' }, this.data ? t('table.empty') : t('status.loading'))));
+    }
     this.table.querySelector('tbody').replaceChildren(...rows);
   }
 
@@ -367,7 +416,7 @@ class StatsApp {
       { award: a.topTeamKiller, label: 'ach.topTeamKiller', unit: 'unit.teamKills' },
       { award: a.topVehicles, label: 'ach.topVehicles', unit: 'unit.vehicles' },
       { award: a.topDeaths, label: 'ach.topDeaths', unit: 'unit.deaths' },
-      { award: a.topSquad && { name: a.topSquad.name, value: a.topSquad.kdm }, label: 'ach.topSquad', unit: 'unit.kd', squad: true, sub: () => t('ach.bestSquad') },
+      { award: a.topSquad && { name: a.topSquad.name, value: a.topSquad.kd }, label: 'ach.topSquad', unit: 'unit.kd', squad: true, sub: () => t('ach.bestSquad') },
       { award: a.longestKill, label: 'ach.longestKill', unit: 'unit.metres', sub: (p) => `${squadOf(p)} · ${p.weapon || ''}`, title: (p) => `${p.name} → ${p.victim}, ${p.weapon} (${p.date})` },
     ];
     $('achievements').replaceChildren(...cards.map(c => {
@@ -406,8 +455,9 @@ class StatsApp {
   }
 
   tiles(items) {
-    return el('div', { class: 'tiles' }, items.map(([label, value]) =>
-      el('div', { class: 'tile' }, el('div', { class: 'v' }, value), el('div', { class: 'l' }, t(label)))));
+    // A third element marks a literal label (custom column names are not translated).
+    return el('div', { class: 'tiles' }, items.map(([label, value, literal]) =>
+      el('div', { class: 'tile' }, el('div', { class: 'v' }, value), el('div', { class: 'l' }, literal ? label : t(label)))));
   }
 
   list(title, items, onClick) {
@@ -448,7 +498,8 @@ class StatsApp {
         el('p', { class: 'subtitle' }, [p.squadRaw ? `[${p.squadRaw}]` : null, this.range, t('detail.firstLast', { first: p.firstSeen, last: p.lastSeen })].filter(Boolean).join(' · ')),
         this.tiles([
           ['col.kills', p.kills], ['col.deaths', p.deaths], ['col.teamKills.title', p.teamKills], ['col.vehicles.title', p.vehiclesDestroyed],
-          ['col.kd', fmt(p.kdm)], ['col.accuracy', fmt(p.accuracy)], ['tile.missions', p.attendance], ['tile.shots', p.shotsFired],
+          ['tile.assists', p.killAssists], ['col.kd', fmt(p.kd)], ['col.accuracy', fmt(p.accuracy)], ['tile.missions', p.attendance],
+          ['tile.shots', p.shotsFired], ...this.columns(false).map(c => [c.name, this.customValue(p, c), true]),
         ]),
         lk ? el('p', { class: 'note' }, t('detail.longestKill', { d: Math.round(lk.distance), victim: lk.victim, weapon: lk.weapon, date: lk.date })) : null,
         el('div', { class: 'lists' },
@@ -456,11 +507,11 @@ class StatsApp {
           this.list('list.victims', d.victims, (n) => this.openPlayer(n)),
           this.list('list.killedBy', d.killedBy, (n) => this.openPlayer(n)),
           this.list('list.squads', d.squads, (n) => this.openSquad(n))),
-        this.dataTable(['col.date', 'col.mission', 'col.map', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles'],
+        this.dataTable(['col.date', 'col.mission', 'col.map', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists'],
           d.missions.map(m => el('tr', {},
             el('td', {}, m.date), el('td', {}, this.replayLink(m.missionId, m.filename, m.name)), el('td', {}, m.world),
             el('td', {}, m.squadRaw || '-'), el('td', {}, m.side),
-            el('td', {}, m.kills), el('td', {}, m.deaths), el('td', {}, m.teamKills), el('td', {}, m.vehiclesDestroyed)))),
+            el('td', {}, m.kills), el('td', {}, m.deaths), el('td', {}, m.teamKills), el('td', {}, m.vehiclesDestroyed), el('td', {}, m.killAssists)))),
       ];
     });
   }
@@ -473,15 +524,16 @@ class StatsApp {
         el('p', { class: 'subtitle' }, `${this.range} · ${t('detail.squadOnly')}`),
         this.tiles([
           ['col.players', s.players], ['tile.missions', s.missions], ['col.kills', s.kills], ['col.deaths', s.deaths],
-          ['col.teamKills.title', s.teamKills], ['col.vehicles.title', s.vehiclesDestroyed], ['col.kd', fmt(s.kdm)], ['col.accuracy', fmt(s.accuracy)],
+          ['col.teamKills.title', s.teamKills], ['col.vehicles.title', s.vehiclesDestroyed], ['tile.assists', s.killAssists],
+          ['col.kd', fmt(s.kd)], ['col.accuracy', fmt(s.accuracy)], ...this.columns(true).map(c => [c.name, this.customValue(s, c), true]),
         ]),
         el('div', { style: 'height:16px' }),
-        this.dataTable(['col.name', 'col.tag', 'col.missions', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.accuracy', 'col.kd'],
+        this.dataTable(['col.name', 'col.tag', 'col.missions', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.accuracy', 'col.kd'],
           d.members.map(p => {
             const tr = el('tr', { class: 'clickable' },
               el('td', {}, p.name), el('td', {}, p.squadRaw || '-'), el('td', {}, p.attendance),
               el('td', {}, p.kills), el('td', {}, p.deaths), el('td', {}, p.teamKills),
-              el('td', {}, p.vehiclesDestroyed), el('td', {}, fmt(p.accuracy)), el('td', {}, fmt(p.kdm)));
+              el('td', {}, p.vehiclesDestroyed), el('td', {}, p.killAssists), el('td', {}, fmt(p.accuracy)), el('td', {}, fmt(p.kd)));
             tr.addEventListener('click', () => this.openPlayer(p.name));
             return tr;
           })),
@@ -511,18 +563,20 @@ class StatsApp {
   // --- export ----------------------------------------------------------------------
 
   headerLabels(squads) {
-    return ['col.rank', squads ? 'col.squad' : 'col.name', squads ? 'col.players' : 'col.squad', 'col.kills', 'col.deaths',
-      'col.teamKills', 'col.attendance', 'col.accuracy', 'col.vehicles', 'col.kd'].map(k => t(k));
+    return [...['col.rank', squads ? 'col.squad' : 'col.name', squads ? 'col.players' : 'col.squad', 'col.kills', 'col.deaths',
+      'col.teamKills', 'col.attendance', 'col.accuracy', 'col.vehicles', 'col.assists', 'col.kd'].map(k => t(k)),
+    ...this.columns(squads).map(c => c.name)];
   }
 
   exportExcel() {
     if (!this.data) return;
     const squads = this.viewMode === 'squads';
+    const custom = (x) => this.columns(squads).map(c => (x.custom && x.custom[c.id] !== null && x.custom[c.id] !== undefined ? x.custom[c.id] : ''));
     const rows = this.items().map((x, i) => squads
-      ? [i + 1, x.name || t('noSquad'), x.players, x.kills, x.deaths, x.teamKills, x.avgAttendance, x.accuracy, x.vehiclesDestroyed, x.kdm]
-      : [i + 1, x.name, x.squadRaw || '-', x.kills, x.deaths, x.teamKills, x.attendance, x.accuracy, x.vehiclesDestroyed, x.kdm]);
+      ? [i + 1, x.name || t('noSquad'), x.players, x.kills, x.deaths, x.teamKills, x.avgAttendance, x.accuracy, x.vehiclesDestroyed, x.killAssists, x.kd, ...custom(x)]
+      : [i + 1, x.name, x.squadRaw || '-', x.kills, x.deaths, x.teamKills, x.attendance, x.accuracy, x.vehiclesDestroyed, x.killAssists, x.kd, ...custom(x)]);
     const sheet = t(squads ? 'xls.squads' : 'xls.players');
-    const blob = window.xlsx.workbook(sheet, this.headerLabels(squads), rows, [5, 22, 14, 10, 10, 8, 13, 13, 8, 8]);
+    const blob = window.xlsx.workbook(sheet, this.headerLabels(squads), rows, [5, 22, 14, 10, 10, 8, 13, 13, 8, 8, 8]);
     const url = URL.createObjectURL(blob);
     const a = el('a', { href: url, download: `${sheet}_${this.periodText().replace(/[^\d-]+/g, '_')}.xlsx` });
     document.body.append(a);
