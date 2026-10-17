@@ -157,7 +157,7 @@ Over a period:
 
 - **K/D:** kills / deaths (kills when there are no deaths).
 - **Kill assist:** a kill (not a team kill) made by another crew member of the vehicle the player sat in at that moment, so drivers and commanders get credit for their gunner's kills. Crews are taken from the vehicle positions in the recording.
-- **Squads:** a player's results count towards the squad they played in during each mission. Squad names are merged case-insensitively and shown in their most common spelling.
+- **Squads:** a player's results count towards the squad they played in during each mission, so a player who leaves a squad does not take its past results along. The players table shows the squad of the player's latest mission in the period (none if they last played without one). Squad names are merged case-insensitively and shown in their most common spelling.
 - **Best squad award:** an attendance-weighted K/D pulled towards the average for squads with few deaths.
 - **Rotation:** a rotation side wins a mission when the winner of the `endMission` event names the in-game side (EAST, WEST, …) most of its players were on; any other mission is a draw.
 

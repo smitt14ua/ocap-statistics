@@ -17,7 +17,7 @@ const NoSquad = "-"
 
 type Player struct {
 	Name              string  `json:"name"`
-	Squad             string  `json:"squad"`    // normalised squad of the latest mission with a squad
+	Squad             string  `json:"squad"`    // normalised squad of the latest mission ("" = played without a squad)
 	SquadRaw          string  `json:"squadRaw"` // squad as captured from the nickname, before aliases
 	Kills             int     `json:"kills"`
 	Deaths            int     `json:"deaths"`
@@ -105,10 +105,10 @@ func Build(missions []store.Mission, rows []store.Row) *Result {
 		p.Hits += row.Hits
 		a.missions[row.MissionID] = true
 		p.LastSeen = row.Date
-		if row.Squad != "" {
-			p.Squad = r.SquadName(row.Squad)
-			p.SquadRaw = row.SquadRaw
-		}
+		// The player is shown in the squad of their latest mission, also when they left it;
+		// squad statistics count every mission in the squad it was played in.
+		p.Squad = r.SquadName(row.Squad)
+		p.SquadRaw = row.SquadRaw
 	}
 
 	maxAtt := 1

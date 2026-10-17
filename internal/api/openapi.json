@@ -964,7 +964,7 @@
           },
           "squad": {
             "type": "string",
-            "description": "Squad of the latest mission with a squad (normalized, aliases applied)"
+            "description": "Squad of the latest mission in the period, empty when it was played without a squad (normalized, aliases applied)"
           },
           "squadRaw": {
             "type": "string",
