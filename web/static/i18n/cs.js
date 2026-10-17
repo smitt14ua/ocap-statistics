@@ -222,6 +222,8 @@
   'f.since.hint': 'Prázdné znamená celý archiv. Starší záznamy se ze statistik odstraní.',
   'f.minDuration': 'Minimální délka mise, min',
   'f.minDuration.hint': 'Kratší mise se nepočítají. Platí okamžitě, bez přepočtu.',
+  'f.minMissions': 'Minimum misí pro zobrazení',
+  'f.minMissions.hint': 'Hráči s menším počtem misí ve zvoleném období a oddíly, které se jich zúčastnily méně, se v tabulkách a úspěších nezobrazují. Jejich mise se oddílům dál započítávají. 0 zobrazí všechny.',
   'sec.rotation': 'Rotace',
   'f.rotSince': 'Počítat rotaci od',
   'side.name': 'Název strany',

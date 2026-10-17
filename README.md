@@ -93,6 +93,7 @@ Statistics settings (tags, start date, minimum duration, nickname format, aliase
 | `sync.maxAttempts`, `sync.retryDelay` | — | `5`, `30m` | Retries of failing recordings (exponential back-off) |
 | `stats.defaultTag` | `OCAPSTATS_DEFAULT_TAG` | all | Tag used when a request has no `tag` |
 | `stats.minDuration` | `OCAPSTATS_MIN_DURATION` | `1200` | Missions shorter than this (seconds) are not counted |
+| `stats.minMissions` | `OCAPSTATS_MIN_MISSIONS` | `0` | Players and squads with fewer missions in the selected period are not listed (their missions still count for their squads) |
 | `stats.squadPattern` | `OCAPSTATS_SQUAD_PATTERN` | `\[~?(.*?)~?\]\s*` | Regex for the squad in a nickname; group 1 is the squad, the whole match is cut from the name |
 | `stats.squadAliases` | — | — | Squad spellings merged into one squad, e.g. `{"A.L.P.H.A.": "ALPHA"}` |
 | `stats.ignoreNames` | — | — | Player names never counted (headless clients and `__SERVER__` are always skipped) |

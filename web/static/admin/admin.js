@@ -316,6 +316,7 @@ class Admin {
     $('sDefaultTag').value = s.defaultTag || '';
     $('sSince').value = s.since || '';
     $('sMinDuration').value = Math.round((s.minDuration || 0) / 60);
+    $('sMinMissions').value = s.minMissions || 0;
     $('sRotationSince').value = s.rotation.since || '';
     $('sides').replaceChildren();
     (s.rotation.sides || []).forEach(side => this.addSide(side));
@@ -453,6 +454,7 @@ class Admin {
       defaultTag: $('sDefaultTag').value.trim(),
       since: $('sSince').value,
       minDuration: Number($('sMinDuration').value || 0) * 60,
+      minMissions: Math.max(0, Math.round(Number($('sMinMissions').value || 0))),
       nickname: this.collectNickname(),
       columns: [...$('columns').querySelectorAll('.column-card')].map(card => this.columnFrom(card)),
       sort: {

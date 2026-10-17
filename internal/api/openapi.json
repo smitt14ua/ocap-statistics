@@ -844,6 +844,10 @@
           },
           "minDuration": {
             "type": "number"
+          },
+          "minMissions": {
+            "type": "integer",
+            "description": "Players and squads with fewer missions in the period are left out of the leaderboards, totals and achievements (0 = everyone)"
           }
         }
       },

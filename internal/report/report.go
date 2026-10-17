@@ -76,6 +76,9 @@ type Result struct {
 	// squadKey maps a lower-cased squad to its display name.
 	squadKey map[string]string
 	rows     []store.Row
+	// fullPlayers and fullSquads keep the unfiltered lists once Hide has run.
+	fullPlayers []Player
+	fullSquads  []Squad
 }
 
 // Build aggregates rows (ordered by date) of the given missions.
@@ -273,12 +276,53 @@ func (r *Result) FindSquad(name string) (Squad, bool) {
 	if name == NoSquad {
 		name = ""
 	}
-	for _, s := range r.Squads {
+	for _, s := range r.allSquads() {
 		if strings.EqualFold(s.Name, name) {
 			return s, true
 		}
 	}
 	return Squad{}, false
+}
+
+// FindPlayer looks a player up by exact name, including players hidden by Hide.
+func (r *Result) FindPlayer(name string) (Player, bool) {
+	players := r.Players
+	if r.fullPlayers != nil {
+		players = r.fullPlayers
+	}
+	i := slices.IndexFunc(players, func(p Player) bool { return p.Name == name })
+	if i < 0 {
+		return Player{}, false
+	}
+	return players[i], true
+}
+
+func (r *Result) allSquads() []Squad {
+	if r.fullSquads != nil {
+		return r.fullSquads
+	}
+	return r.Squads
+}
+
+// Hide drops players with fewer than minMissions missions and squads that took part in fewer
+// than minMissions missions from Players, Squads, the player and squad counts in Totals and
+// the achievements; players without a squad are kept as a group. Squad statistics still
+// include the missions of hidden players, and FindPlayer/FindSquad still find hidden ones.
+// Call it after ApplyColumns so hidden entries keep their custom values.
+func (r *Result) Hide(minMissions int) {
+	if minMissions <= 1 {
+		return
+	}
+	r.fullPlayers, r.fullSquads = r.Players, r.Squads
+	r.Players = slices.DeleteFunc(slices.Clone(r.Players), func(p Player) bool { return p.Attendance < minMissions })
+	r.Squads = slices.DeleteFunc(slices.Clone(r.Squads), func(s Squad) bool { return s.Name != "" && s.Missions < minMissions })
+	r.Totals.Players = len(r.Players)
+	r.Totals.Squads = 0
+	for _, s := range r.Squads {
+		if s.Name != "" {
+			r.Totals.Squads++
+		}
+	}
 }
 
 // --- formulas ----------------------------------------------------------------

@@ -34,6 +34,33 @@ func TestBuildSquadOfLatestMission(t *testing.T) {
 	}
 }
 
+func TestHide(t *testing.T) {
+	row := func(id int64, name, squad string) store.Row {
+		return store.Row{MissionID: id, PlayerRow: stats.PlayerRow{Name: name, Squad: squad, SquadRaw: squad, Kills: 1}}
+	}
+	// Veteran played 3 missions in ALPHA; Newbie joined ALPHA for one; Guest played one in BRAVO.
+	r := Build([]store.Mission{{ID: 1}, {ID: 2}, {ID: 3}}, []store.Row{
+		row(1, "Veteran", "ALPHA"), row(2, "Veteran", "ALPHA"), row(3, "Veteran", "ALPHA"),
+		row(3, "Newbie", "ALPHA"), row(2, "Guest", "BRAVO"), row(1, "Solo", ""), row(2, "Solo", ""),
+	})
+	r.Hide(2)
+	if len(r.Players) != 2 || r.Players[0].Name != "Solo" || r.Players[1].Name != "Veteran" || r.Totals.Players != 2 {
+		t.Errorf("players = %+v", r.Players)
+	}
+	if len(r.Squads) != 2 || r.Squads[0].Name != "ALPHA" || r.Squads[1].Name != "" || r.Totals.Squads != 1 {
+		t.Errorf("squads = %+v", r.Squads)
+	}
+	if r.Squads[0].Kills != 4 || r.Squads[0].Players != 2 {
+		t.Errorf("ALPHA lost the missions of a hidden player: %+v", r.Squads[0])
+	}
+	if _, ok := r.FindPlayer("Newbie"); !ok {
+		t.Error("hidden player not found")
+	}
+	if _, ok := r.FindSquad("BRAVO"); !ok {
+		t.Error("hidden squad not found")
+	}
+}
+
 func TestAchievementsTopAssists(t *testing.T) {
 	r := &Result{Players: []Player{
 		{Name: "Alpha", KillAssists: 3},

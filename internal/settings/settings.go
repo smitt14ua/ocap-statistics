@@ -32,7 +32,10 @@ type Settings struct {
 	// Since limits ingestion to recordings dated on or after this day. Empty = all.
 	Since string `json:"since"`
 	// MinDuration (seconds): shorter missions are not counted.
-	MinDuration float64         `json:"minDuration"`
+	MinDuration float64 `json:"minDuration"`
+	// MinMissions hides players and squads with fewer missions in the period from the tables
+	// and achievements (see report.Result.Hide). 0 or 1 shows everyone.
+	MinMissions int             `json:"minMissions"`
 	Nickname    stats.Nickname  `json:"nickname"`
 	Rotation    config.Rotation `json:"rotation"`
 	// Columns are custom statistics columns defined in the admin panel.
@@ -90,6 +93,7 @@ func FromConfig(cfg config.Config) Settings {
 		DefaultTag:  cfg.Stats.DefaultTag,
 		Since:       cfg.Sync.Since,
 		MinDuration: cfg.Stats.MinDuration,
+		MinMissions: cfg.Stats.MinMissions,
 		Nickname: stats.Nickname{
 			SquadPattern: cfg.Stats.SquadPattern,
 			Aliases:      maps.Clone(cfg.Stats.SquadAliases),
@@ -110,6 +114,9 @@ func (s *Settings) Normalize() (*stats.Rules, error) {
 	}
 	if s.MinDuration < 0 {
 		return nil, errors.New("minDuration must not be negative")
+	}
+	if s.MinMissions < 0 {
+		return nil, errors.New("minMissions must not be negative")
 	}
 	s.Nickname.IgnoreNames = cleanList(s.Nickname.IgnoreNames)
 	if s.Nickname.Aliases == nil {

@@ -79,8 +79,10 @@ func (s *Server) report(ctx context.Context, f store.Filter) (built, error) {
 		if err != nil {
 			return built{}, err
 		}
+		set := s.settings.Get()
 		res := report.Build(missions, rows)
-		res.ApplyColumns(s.settings.Get().Columns)
+		res.ApplyColumns(set.Columns)
+		res.Hide(set.MinMissions)
 		return built{res: res, longest: longest}, nil
 	})
 }
@@ -251,6 +253,7 @@ func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) {
 		"columns":     publicColumns(set.Columns),
 		"sort":        set.Sort,
 		"minDuration": set.MinDuration,
+		"minMissions": set.MinMissions,
 		"rotation":    set.Rotation,
 	})
 }
@@ -417,11 +420,10 @@ func (s *Server) player(r *http.Request) (response, error) {
 		return response{}, err
 	}
 	res := b.res
-	i := slices.IndexFunc(res.Players, func(p report.Player) bool { return p.Name == name })
-	if i < 0 {
+	pl, ok := res.FindPlayer(name)
+	if !ok {
 		return response{}, notFound("player")
 	}
-	pl := res.Players[i]
 	rows, err := s.store.Rows(ctx, f, name)
 	if err != nil {
 		return response{}, err

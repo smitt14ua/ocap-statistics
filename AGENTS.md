@@ -120,3 +120,4 @@ docs/decisions.md             why things are built the way they are (SQLite, dig
 - Saved admin settings override config/env until reset; tests that change config must account for that.
 - The default sort (`settings.Sort`) may point to a custom column (`custom.<id>`); `SortOrder.normalize` falls back to kills when that column is deleted, and `app.js` `defaultSort` does the same on the client.
 - `sync.since` / the admin "process recordings from" date also removes older recordings from the database (it mirrors OCAP filtered by the settings).
+- `Server.report` hides players and squads below the "minimum missions" setting from `Players`/`Squads`; look a player or squad up with `FindPlayer`/`FindSquad`, which also see hidden ones.

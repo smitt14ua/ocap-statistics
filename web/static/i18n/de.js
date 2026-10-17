@@ -222,6 +222,8 @@
   'f.since.hint': 'Leer bedeutet das gesamte Archiv. Ältere Aufnahmen werden aus der Statistik entfernt.',
   'f.minDuration': 'Mindestdauer einer Mission, min',
   'f.minDuration.hint': 'Kürzere Missionen werden nicht gezählt. Gilt sofort, ohne Neuberechnung.',
+  'f.minMissions': 'Mindestanzahl Missionen für die Anzeige',
+  'f.minMissions.hint': 'Spieler mit weniger Missionen im gewählten Zeitraum und Squads, die an weniger teilgenommen haben, erscheinen nicht in den Tabellen und Auszeichnungen. Ihre Missionen zählen weiterhin für ihren Squad. 0 zeigt alle.',
   'sec.rotation': 'Rotation',
   'f.rotSince': 'Rotation zählen ab',
   'side.name': 'Name der Seite',

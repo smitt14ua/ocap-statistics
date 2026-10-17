@@ -314,3 +314,58 @@ func TestDefaultSort(t *testing.T) {
 		t.Errorf("unknown sort field accepted: %d", rec.Code)
 	}
 }
+
+func TestMinMissions(t *testing.T) {
+	_, sy, h := setup(t)
+	runSync(t, sy)
+	c := login(t, h, "admin", "secret-password")
+	var state struct{ Settings settings.Settings }
+	_ = json.Unmarshal(c.do(http.MethodGet, "/api/admin/state", nil).Body.Bytes(), &state)
+	set := state.Settings
+
+	// Nobody has 99 missions: the leaderboards are empty, profiles still open.
+	set.MinMissions = 99
+	if rec := c.do(http.MethodPut, "/api/admin/settings", set); rec.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rec.Code, rec.Body)
+	}
+	var stats struct {
+		Totals       report.Totals
+		Players      []report.Player
+		Squads       []report.Squad
+		Achievements report.Achievements
+	}
+	get(t, h, "/api/v1/stats", &stats)
+	if len(stats.Players) != 0 || stats.Totals.Players != 0 || stats.Totals.Squads != 0 || stats.Achievements.TopKiller != nil {
+		t.Errorf("hidden players listed: %+v", stats)
+	}
+	for _, s := range stats.Squads {
+		if s.Name != "" {
+			t.Errorf("hidden squad listed: %+v", s)
+		}
+	}
+	if stats.Totals.Kills == 0 {
+		t.Error("totals lost the kills of hidden players")
+	}
+	if rec := get(t, h, "/api/v1/players/Smith", nil); rec.Code != http.StatusOK {
+		t.Errorf("profile of a hidden player: %d", rec.Code)
+	}
+	var cfg struct{ MinMissions int }
+	get(t, h, "/api/v1/config", &cfg)
+	if cfg.MinMissions != 99 {
+		t.Errorf("public config minMissions = %d", cfg.MinMissions)
+	}
+
+	set.MinMissions = 0
+	if rec := c.do(http.MethodPut, "/api/admin/settings", set); rec.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rec.Code, rec.Body)
+	}
+	get(t, h, "/api/v1/stats", &stats)
+	if len(stats.Players) != 3 {
+		t.Errorf("players with minMissions 0: %d, want 3", len(stats.Players))
+	}
+
+	set.MinMissions = -1
+	if rec := c.do(http.MethodPut, "/api/admin/settings", set); rec.Code != http.StatusBadRequest {
+		t.Errorf("negative minMissions accepted: %d", rec.Code)
+	}
+}

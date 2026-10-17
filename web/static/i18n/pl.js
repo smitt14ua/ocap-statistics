@@ -222,6 +222,8 @@
   'f.since.hint': 'Puste oznacza całe archiwum. Starsze nagrania są usuwane ze statystyk.',
   'f.minDuration': 'Minimalny czas misji, min',
   'f.minDuration.hint': 'Krótsze misje nie są liczone. Działa od razu, bez przeliczania.',
+  'f.minMissions': 'Minimum misji do wyświetlenia',
+  'f.minMissions.hint': 'Gracze z mniejszą liczbą misji w wybranym okresie i oddziały, które wzięły udział w mniejszej liczbie, nie są pokazywani w tabelach i osiągnięciach. Ich misje nadal liczą się dla ich oddziałów. 0 pokazuje wszystkich.',
   'sec.rotation': 'Rotacja',
   'f.rotSince': 'Licz rotację od',
   'side.name': 'Nazwa strony',

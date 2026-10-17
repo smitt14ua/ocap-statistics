@@ -223,6 +223,8 @@
   'f.since.hint': 'Empty means the whole archive. Older recordings are removed from the statistics.',
   'f.minDuration': 'Minimum mission length, min',
   'f.minDuration.hint': 'Shorter missions are not counted. Applies immediately, no recompute.',
+  'f.minMissions': 'Minimum missions to be listed',
+  'f.minMissions.hint': 'Players with fewer missions in the selected period, and squads that took part in fewer, are left out of the tables and achievements. Their missions still count towards their squads. 0 shows everyone.',
   'sec.rotation': 'Rotation',
   'f.rotSince': 'Count rotation from',
   'side.name': 'Side name',

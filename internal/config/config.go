@@ -109,6 +109,9 @@ type Stats struct {
 	DefaultTag string `json:"defaultTag"`
 	// MinDuration (seconds) – shorter missions are not counted.
 	MinDuration float64 `json:"minDuration"`
+	// MinMissions hides players and squads with fewer missions in the selected period from
+	// the tables and achievements. 0 shows everyone.
+	MinMissions int `json:"minMissions"`
 	// SquadPattern is a regexp whose first group is the squad in a nickname; the whole match
 	// is removed to get the name.
 	SquadPattern string `json:"squadPattern"`
@@ -240,6 +243,13 @@ func applyEnv(cfg *Config) error {
 			return fmt.Errorf("OCAPSTATS_MIN_DURATION: %w", err)
 		}
 		cfg.Stats.MinDuration = n
+	}
+	if v, ok := os.LookupEnv("OCAPSTATS_MIN_MISSIONS"); ok {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("OCAPSTATS_MIN_MISSIONS: %w", err)
+		}
+		cfg.Stats.MinMissions = n
 	}
 	for key, dst := range map[string]*Duration{
 		"OCAPSTATS_SYNC_INTERVAL":      &cfg.Sync.Interval,
