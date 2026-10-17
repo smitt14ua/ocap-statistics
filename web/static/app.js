@@ -21,7 +21,16 @@ const $ = (id) => document.getElementById(id);
 
 const fmt = (v, digits = 2) => Number(v || 0).toFixed(digits);
 const fmtDuration = (sec) => t('duration', { m: Math.floor(sec / 60), s: Math.floor(sec % 60) });
-const isoDate = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+// Elapsed time in the unit that keeps the number short: 850 µs, 4.2 ms, 142 ms, 3.25 s, 1 min 5 s.
+// Browsers coarsen performance.now() to ~0.1 ms, so nothing finer than microseconds is meaningful.
+const fmtElapsed = (ms) => {
+  const num = (v, digits) => v.toLocaleString(window.i18n.lang, { maximumFractionDigits: digits });
+  if (ms < 1) return t('time.us', { n: num(ms * 1000, 0) });
+  if (ms < 1000) return t('time.ms', { n: num(ms, ms < 10 ? 1 : 0) });
+  if (ms < 60000) return t('time.s', { n: num(ms / 1000, ms < 10000 ? 2 : 1) });
+  return fmtDuration(ms / 1000);
+};
+const isoDate =(d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
 // html2canvas is only needed for screenshots, so it is loaded on demand and pinned by
 // Subresource Integrity.
@@ -222,7 +231,7 @@ class StatsApp {
       this.data = stats;
       this.rotation = rot.rotation;
       this.range = this.periodText();
-      this.loadTime = ((performance.now() - started) / 1000).toFixed(2);
+      this.loadTime = performance.now() - started;
       this.updateURL();
       this.buildFilter();
       this.render();
@@ -247,7 +256,7 @@ class StatsApp {
     if (this.data) {
       const tot = this.data.totals;
       parts.push(t('status.missions', { n: tot.missions }), t('status.players', { n: tot.players }),
-        t('status.squads', { n: tot.squads }), t('status.time', { s: this.loadTime }));
+        t('status.squads', { n: tot.squads }), t('status.time', { t: fmtElapsed(this.loadTime) }));
     }
     let st = null;
     try {
