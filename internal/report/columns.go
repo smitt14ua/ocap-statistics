@@ -20,6 +20,12 @@ const (
 	TargetBoth    = "both"
 )
 
+// Sort fields accepted for players and squads, besides "custom.<column id>".
+var (
+	PlayerSortFields = []string{"kills", "deaths", "teamKills", "vehiclesDestroyed", "killAssists", "attendance", "accuracy", "kd", "shotsFired", "hits", "name", "squad"}
+	SquadSortFields  = []string{"kills", "deaths", "teamKills", "vehiclesDestroyed", "killAssists", "attendance", "players", "accuracy", "kd", "score", "name"}
+)
+
 // MaxColumns limits how many custom columns can be defined.
 const MaxColumns = 20
 

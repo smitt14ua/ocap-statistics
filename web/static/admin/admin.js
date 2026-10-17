@@ -221,6 +221,7 @@ class Admin {
       document.querySelectorAll('#sides .side, #columns .column-card').forEach(row => window.i18n.apply(row));
       this.renderVarList();
       this.renderColumnsEmpty();
+      if (this.state) this.renderSortOptions(this.collectSettings().sort);
     });
   }
 
@@ -326,6 +327,7 @@ class Admin {
     $('columns').replaceChildren();
     (s.columns || []).forEach(c => this.addColumn(c));
     this.renderColumnsEmpty();
+    this.renderSortOptions(s.sort || {});
     this.formDirty = false;
   }
 
@@ -343,6 +345,31 @@ class Admin {
       el('button', { type: 'button', class: 'small danger', 'data-i18n-title': 'side.remove', 'data-i18n-aria': 'side.remove', onclick: () => { row.remove(); this.formDirty = true; } }, '✕'));
     window.i18n.apply(row);
     $('sides').append(row);
+  }
+
+  // --- default sort ---------------------------------------------------------------
+
+  // renderSortOptions fills the default sort selects: the visible table columns plus saved
+  // custom columns shown in that table.
+  renderSortOptions(sort) {
+    const base = {
+      players: [['kills', 'col.kills'], ['deaths', 'col.deaths'], ['teamKills', 'col.teamKills.title'], ['attendance', 'col.attendance'],
+        ['accuracy', 'col.accuracy'], ['vehiclesDestroyed', 'col.vehicles.title'], ['killAssists', 'tile.assists'], ['kd', 'col.kd'],
+        ['name', 'col.name'], ['squad', 'col.squad']],
+      squads: [['kills', 'col.kills'], ['deaths', 'col.deaths'], ['teamKills', 'col.teamKills.title'], ['attendance', 'col.attendance'],
+        ['accuracy', 'col.accuracy'], ['vehiclesDestroyed', 'col.vehicles.title'], ['killAssists', 'tile.assists'], ['kd', 'col.kd'],
+        ['players', 'col.players'], ['name', 'col.squad']],
+    };
+    const saved = (this.state && this.state.settings.columns) || [];
+    for (const [table, fieldId, orderId] of [['players', 'sortPlayersField', 'sortPlayersOrder'], ['squads', 'sortSquadsField', 'sortSquadsOrder']]) {
+      const current = (sort[table] && sort[table].field) || $(fieldId).value || 'kills';
+      const custom = saved.filter(c => c.target === 'both' || c.target === table);
+      $(fieldId).replaceChildren(
+        ...base[table].map(([v, key]) => el('option', { value: v }, t(key))),
+        ...custom.map(c => el('option', { value: `custom.${c.id}` }, c.name)));
+      $(fieldId).value = [...$(fieldId).options].some(o => o.value === current) ? current : 'kills';
+      if (sort[table] && sort[table].order) $(orderId).value = sort[table].order;
+    }
   }
 
   // --- custom columns ------------------------------------------------------------
@@ -428,6 +455,10 @@ class Admin {
       minDuration: Number($('sMinDuration').value || 0) * 60,
       nickname: this.collectNickname(),
       columns: [...$('columns').querySelectorAll('.column-card')].map(card => this.columnFrom(card)),
+      sort: {
+        players: { field: $('sortPlayersField').value, order: $('sortPlayersOrder').value },
+        squads: { field: $('sortSquadsField').value, order: $('sortSquadsOrder').value },
+      },
       rotation: {
         since: $('sRotationSince').value,
         sides: [...$('sides').children].map(row => ({

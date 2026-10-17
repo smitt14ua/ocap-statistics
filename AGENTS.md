@@ -93,4 +93,5 @@ web/static/app.css            shared design tokens and components
 - `killed` events come in two layouts (`[f, "killed", victim, [killer, weapon], dist]` and `[f, "killed", source, target, weapon, dist]`); `causedById` 0 is a real entity id.
 - A vehicle weapon kill is attributed to the gunner (a unit), not the vehicle; crews come from vehicle positions `[pos, dir, alive, [crew ids], [from, to]]`.
 - Saved admin settings override config/env until reset; tests that change config must account for that.
+- The default sort (`settings.Sort`) may point to a custom column (`custom.<id>`); `SortOrder.normalize` falls back to kills when that column is deleted, and `app.js` `defaultSort` does the same on the client.
 - `sync.since` / the admin "process recordings from" date also removes older recordings from the database (it mirrors OCAP filtered by the settings).

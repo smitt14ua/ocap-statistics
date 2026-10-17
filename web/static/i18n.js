@@ -7,6 +7,13 @@
 
   const DICT = {
     en: {
+      'sec.sort': 'Default sort',
+      'sort.hint': 'How the tables are sorted when a visitor opens the site (and in the API without a sort parameter). Custom columns appear here once saved.',
+      'sort.players': 'Players table',
+      'sort.squads': 'Squads table',
+      'sort.order': 'Order',
+      'sort.desc': 'Descending',
+      'sort.asc': 'Ascending',
       'col.status': 'Status',
       'col.actions': 'Actions',
       'lang.label': 'Language',
@@ -316,6 +323,13 @@
     },
 
     cs: {
+      'sec.sort': 'Výchozí řazení',
+      'sort.hint': 'Jak jsou tabulky seřazeny po otevření webu (a v API bez parametru sort). Vlastní sloupce se tu objeví po uložení.',
+      'sort.players': 'Tabulka hráčů',
+      'sort.squads': 'Tabulka oddílů',
+      'sort.order': 'Pořadí',
+      'sort.desc': 'Sestupně',
+      'sort.asc': 'Vzestupně',
       'col.status': 'Stav',
       'col.actions': 'Akce',
       'lang.label': 'Jazyk',
@@ -625,6 +639,13 @@
     },
 
     uk: {
+      'sec.sort': 'Сортування за замовчуванням',
+      'sort.hint': 'Як сортуються таблиці, коли відвідувач відкриває сайт (і в API без параметра sort). Власні колонки з’являються тут після збереження.',
+      'sort.players': 'Таблиця гравців',
+      'sort.squads': 'Таблиця відділень',
+      'sort.order': 'Порядок',
+      'sort.desc': 'За спаданням',
+      'sort.asc': 'За зростанням',
       'col.status': 'Стан',
       'col.actions': 'Дії',
       'lang.label': 'Мова',
@@ -934,6 +955,13 @@
     },
 
     de: {
+      'sec.sort': 'Standardsortierung',
+      'sort.hint': 'Wie die Tabellen sortiert sind, wenn jemand die Seite öffnet (und in der API ohne sort-Parameter). Eigene Spalten erscheinen hier nach dem Speichern.',
+      'sort.players': 'Spielertabelle',
+      'sort.squads': 'Squad-Tabelle',
+      'sort.order': 'Reihenfolge',
+      'sort.desc': 'Absteigend',
+      'sort.asc': 'Aufsteigend',
       'col.status': 'Status',
       'col.actions': 'Aktionen',
       'lang.label': 'Sprache',
@@ -1243,6 +1271,13 @@
     },
 
     pl: {
+      'sec.sort': 'Domyślne sortowanie',
+      'sort.hint': 'Jak sortowane są tabele po otwarciu strony (oraz w API bez parametru sort). Własne kolumny pojawiają się tu po zapisaniu.',
+      'sort.players': 'Tabela graczy',
+      'sort.squads': 'Tabela oddziałów',
+      'sort.order': 'Kolejność',
+      'sort.desc': 'Malejąco',
+      'sort.asc': 'Rosnąco',
       'col.status': 'Stan',
       'col.actions': 'Akcje',
       'lang.label': 'Język',

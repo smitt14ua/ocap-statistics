@@ -37,6 +37,50 @@ type Settings struct {
 	Rotation    config.Rotation `json:"rotation"`
 	// Columns are custom statistics columns defined in the admin panel.
 	Columns []report.Column `json:"columns"`
+	// Sort is the default order of the players and squads tables (site and API).
+	Sort DefaultSort `json:"sort"`
+}
+
+// DefaultSort holds the default sort of each table.
+type DefaultSort struct {
+	Players SortOrder `json:"players"`
+	Squads  SortOrder `json:"squads"`
+}
+
+// SortOrder is a sort field ("kills", ..., or "custom.<column id>") and "asc" or "desc".
+type SortOrder struct {
+	Field string `json:"field"`
+	Order string `json:"order"`
+}
+
+// defaultSortOrder is used when nothing (or something no longer valid) is configured.
+var defaultSortOrder = SortOrder{Field: "kills", Order: "desc"}
+
+// normalize validates a sort order. A custom column that no longer exists (or is not shown
+// for this table) falls back to the default instead of failing, so deleting a column does
+// not block saving.
+func (o *SortOrder) normalize(table string, fields []string, cols []report.Column, exclude string) error {
+	o.Field = strings.TrimSpace(o.Field)
+	if o.Field == "" {
+		*o = defaultSortOrder
+		return nil
+	}
+	if id, ok := strings.CutPrefix(o.Field, "custom."); ok {
+		if !slices.ContainsFunc(cols, func(c report.Column) bool { return c.ID == id && c.Target != exclude }) {
+			*o = defaultSortOrder
+			return nil
+		}
+	} else if !slices.Contains(fields, o.Field) {
+		return fmt.Errorf("sort.%s: unknown field %q", table, o.Field)
+	}
+	switch o.Order {
+	case "asc", "desc":
+	case "":
+		o.Order = "desc"
+	default:
+		return fmt.Errorf("sort.%s: order must be asc or desc", table)
+	}
+	return nil
 }
 
 // FromConfig builds settings from the config file and environment.
@@ -52,6 +96,7 @@ func FromConfig(cfg config.Config) Settings {
 			IgnoreNames:  slices.Clone(cfg.Stats.IgnoreNames),
 		},
 		Rotation: cfg.Rotation,
+		Sort:     DefaultSort{Players: defaultSortOrder, Squads: defaultSortOrder},
 	}
 }
 
@@ -75,6 +120,12 @@ func (s *Settings) Normalize() (*stats.Rules, error) {
 		return nil, err
 	}
 	if s.Columns, err = report.NormalizeColumns(s.Columns); err != nil {
+		return nil, err
+	}
+	if err := s.Sort.Players.normalize("players", report.PlayerSortFields, s.Columns, report.TargetSquads); err != nil {
+		return nil, err
+	}
+	if err := s.Sort.Squads.normalize("squads", report.SquadSortFields, s.Columns, report.TargetPlayers); err != nil {
 		return nil, err
 	}
 	s.Rotation.Since = strings.TrimSpace(s.Rotation.Since)

@@ -68,6 +68,7 @@ class StatsApp {
     this.rotation = null;
     this.viewMode = 'players';
     this.sort = { field: 'kills', dir: 'desc' };
+    this.sortedView = null;
     this.allSquads = [];
     this.selected = new Set();
     this.singles = true;
@@ -255,12 +256,21 @@ class StatsApp {
     this.viewMode = mode;
     $('viewPlayers').classList.toggle('active', mode === 'players');
     $('viewSquads').classList.toggle('active', mode === 'squads');
-    if (mode === 'squads' && this.sort.field === 'squad') this.sort = { field: 'kd', dir: 'desc' };
-    if (this.sort.field.startsWith('custom.') && !this.columns(mode === 'squads').some(c => `custom.${c.id}` === this.sort.field)) {
-      this.sort = { field: 'kills', dir: 'desc' };
+    // Each table opens with the default sort configured in the admin panel.
+    if (mode !== this.sortedView) {
+      this.sort = this.defaultSort(mode);
+      this.sortedView = mode;
     }
     this.renderHeaders();
     if (update) { this.updateURL(); this.render(); }
+  }
+
+  defaultSort(mode) {
+    const squads = mode === 'squads';
+    const s = this.cfg.sort && this.cfg.sort[mode];
+    const valid = s && s.field && (!s.field.startsWith('custom.') || this.columns(squads).some(c => `custom.${c.id}` === s.field))
+      && !(squads && s.field === 'squad');
+    return valid ? { field: s.field, dir: s.order === 'asc' ? 'asc' : 'desc' } : { field: 'kills', dir: 'desc' };
   }
 
   // columns returns the custom columns shown in the players or squads view.

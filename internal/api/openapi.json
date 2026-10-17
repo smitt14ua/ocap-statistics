@@ -120,10 +120,9 @@
             "name": "sort",
             "in": "query",
             "schema": {
-              "type": "string",
-              "default": "kills"
+              "type": "string"
             },
-            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, accuracy, kd, shotsFired, hits, name, squad or custom.<column id>"
+            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, accuracy, kd, shotsFired, hits, name, squad or custom.<column id>. Without it the default sort configured by the administrator is used (see /api/v1/config)."
           },
           {
             "$ref": "#/components/parameters/order"
@@ -304,10 +303,9 @@
             "name": "sort",
             "in": "query",
             "schema": {
-              "type": "string",
-              "default": "kd"
+              "type": "string"
             },
-            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, players, accuracy, kd, score, name or custom.<column id>"
+            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, players, accuracy, kd, score, name or custom.<column id>. Without it the default sort configured by the administrator is used (see /api/v1/config)."
           },
           {
             "$ref": "#/components/parameters/order"
@@ -663,7 +661,7 @@
         "tags": [
           "Service"
         ],
-        "summary": "Public settings: title, logo, default tag, minimum duration, rotation sides and custom columns",
+        "summary": "Public settings: title, logo, default tag, minimum duration, rotation sides, custom columns and default sort",
         "responses": {
           "200": {
             "description": "OK"

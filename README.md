@@ -17,7 +17,7 @@ OCAP ──(every 10 min: list of recordings)──► ocap-stats ──► SQLi
 - **REST API** with OpenAPI documentation at `/api/docs`, CSV export, ETag caching and CORS.
 - **Web page** with filters, player/squad views, Excel export, top-10 and rotation screenshots to the clipboard and links to the replays in OCAP.
 - **Custom columns:** define your own columns with spreadsheet-like formulas in the admin panel (e.g. `round(killAssists / attendance, 2)`); they appear on the site, in the API, CSV and Excel.
-- **Admin panel** (`/admin/`) with user accounts: ingestion status, sync / recompute / full resync / retry tasks, settings, nickname format with a live preview, custom columns with a formula preview.
+- **Admin panel** (`/admin/`) with user accounts: ingestion status, sync / recompute / full resync / retry tasks, settings, nickname format with a live preview, custom columns with a formula preview, default sort of the tables (any column, including custom ones).
 - **Localized UI:** English, Czech, German, Polish and Ukrainian, picked from the browser language and switchable manually.
 - **Secure and light by default:** strict Content-Security-Policy, rate-limited admin login, gzip and ETags everywhere, no web fonts or trackers, no third-party code on page load.
 - Single static binary (Go, embedded pure-Go SQLite), multi-arch Docker image (amd64, arm64).
@@ -72,7 +72,7 @@ When the service is only reachable through a reverse proxy (Traefik, nginx, Cadd
 
 Settings come from a JSON file ([`config.example.json`](config.example.json)) and `OCAPSTATS_*` environment variables ([`.env.example`](.env.example)); environment variables take precedence.
 
-Statistics settings (tags, start date, minimum duration, nickname format, aliases, ignored names, rotation) can also be changed in the admin panel. Once saved there, they override the file/environment values until reset from the panel.
+Statistics settings (tags, start date, minimum duration, nickname format, aliases, ignored names, rotation) can also be changed in the admin panel; custom columns and the default sort exist only there. Once saved there, they override the file/environment values until reset from the panel.
 
 | Setting | Environment variable | Default | Description |
 |---|---|---|---|

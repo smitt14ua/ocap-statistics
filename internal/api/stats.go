@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/smitt14ua/ocap-statistics/internal/report"
+	"github.com/smitt14ua/ocap-statistics/internal/settings"
 	"github.com/smitt14ua/ocap-statistics/internal/store"
 )
 
@@ -94,14 +95,18 @@ type listParams struct {
 	csv    bool
 }
 
-func parseList(r *http.Request, defSort string) (listParams, error) {
+// parseList reads list parameters; def is the configured default sort of the table.
+func parseList(r *http.Request, def settings.SortOrder) (listParams, error) {
 	q := r.URL.Query()
-	p := listParams{sort: defSort, desc: true, search: strings.ToLower(strings.TrimSpace(q.Get("search")))}
+	p := listParams{sort: def.Field, desc: def.Order != "asc", search: strings.ToLower(strings.TrimSpace(q.Get("search")))}
 	if v := q.Get("sort"); v != "" {
 		p.sort = v
+		p.desc = true // an explicit sort without order is descending
 	}
 	switch q.Get("order") {
-	case "", "desc":
+	case "":
+	case "desc":
+		p.desc = true
 	case "asc":
 		p.desc = false
 	default:
@@ -244,6 +249,7 @@ func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) {
 		"ocapUrl":     s.cfg.UI.OCAPURL,
 		"defaultTag":  set.DefaultTag,
 		"columns":     publicColumns(set.Columns),
+		"sort":        set.Sort,
 		"minDuration": set.MinDuration,
 		"rotation":    set.Rotation,
 	})
@@ -347,7 +353,7 @@ func (s *Server) players(r *http.Request) (response, error) {
 	if err != nil {
 		return response{}, err
 	}
-	p, err := parseList(r, "kills")
+	p, err := parseList(r, s.settings.Get().Sort.Players)
 	if err != nil {
 		return response{}, err
 	}
@@ -504,7 +510,7 @@ func (s *Server) squads(r *http.Request) (response, error) {
 	if err != nil {
 		return response{}, err
 	}
-	p, err := parseList(r, "kd")
+	p, err := parseList(r, s.settings.Get().Sort.Squads)
 	if err != nil {
 		return response{}, err
 	}

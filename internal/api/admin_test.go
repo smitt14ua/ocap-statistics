@@ -271,3 +271,46 @@ func TestCustomColumns(t *testing.T) {
 		t.Errorf("bad formula saved: %d %s", rec.Code, rec.Body)
 	}
 }
+
+func TestDefaultSort(t *testing.T) {
+	_, sy, h := setup(t)
+	runSync(t, sy)
+	c := login(t, h, "admin", "secret-password")
+	var state struct{ Settings settings.Settings }
+	_ = json.Unmarshal(c.do(http.MethodGet, "/api/admin/state", nil).Body.Bytes(), &state)
+	set := state.Settings
+	if set.Sort.Players.Field != "kills" || set.Sort.Squads.Order != "desc" {
+		t.Fatalf("default sort: %+v", set.Sort)
+	}
+
+	set.Columns = []report.Column{{ID: "deaths2", Name: "D2", Formula: "deaths * 2", Target: "players"}}
+	set.Sort.Players = settings.SortOrder{Field: "custom.deaths2", Order: "asc"}
+	set.Sort.Squads = settings.SortOrder{Field: "name", Order: "asc"}
+	if rec := c.do(http.MethodPut, "/api/admin/settings", set); rec.Code != http.StatusOK {
+		t.Fatalf("save sort: %d %s", rec.Code, rec.Body)
+	}
+	var players struct{ Players []struct{ Name string } }
+	get(t, h, "/api/v1/players", &players)
+	// deaths*2 ascending: Rookie 4, Smith 4 (ties by name), Enemy 8.
+	if len(players.Players) != 3 || players.Players[0].Name != "Rookie" || players.Players[2].Name != "Enemy" {
+		t.Errorf("players not sorted by the custom column: %+v", players.Players)
+	}
+	var squads struct{ Squads []struct{ Name string } }
+	get(t, h, "/api/v1/squads", &squads)
+	if squads.Squads[0].Name != "" && squads.Squads[0].Name > squads.Squads[len(squads.Squads)-1].Name {
+		t.Errorf("squads not sorted by name asc: %+v", squads.Squads)
+	}
+
+	// Removing the column used for sorting falls back to kills instead of failing.
+	set.Columns = nil
+	rec := c.do(http.MethodPut, "/api/admin/settings", set)
+	var saved struct{ Settings settings.Settings }
+	_ = json.Unmarshal(rec.Body.Bytes(), &saved)
+	if rec.Code != http.StatusOK || saved.Settings.Sort.Players.Field != "kills" {
+		t.Errorf("fallback: %d %+v", rec.Code, saved.Settings.Sort)
+	}
+	set.Sort.Players = settings.SortOrder{Field: "bogus"}
+	if rec := c.do(http.MethodPut, "/api/admin/settings", set); rec.Code != http.StatusBadRequest {
+		t.Errorf("unknown sort field accepted: %d", rec.Code)
+	}
+}

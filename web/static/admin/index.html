@@ -166,6 +166,17 @@
             <div id="sides"></div>
             <button type="button" id="addSide" class="small" data-i18n="side.add">+ Add side</button>
 
+            <h2 class="section-title" data-i18n="sec.sort">Default sort</h2>
+            <p class="hint" data-i18n="sort.hint" style="margin-bottom: 12px;"></p>
+            <div class="grid">
+              <label class="field"><span data-i18n="sort.players">Players table</span><select id="sortPlayersField"></select></label>
+              <label class="field"><span data-i18n="sort.order">Order</span>
+                <select id="sortPlayersOrder"><option value="desc" data-i18n="sort.desc"></option><option value="asc" data-i18n="sort.asc"></option></select></label>
+              <label class="field"><span data-i18n="sort.squads">Squads table</span><select id="sortSquadsField"></select></label>
+              <label class="field"><span data-i18n="sort.order">Order</span>
+                <select id="sortSquadsOrder"><option value="desc" data-i18n="sort.desc"></option><option value="asc" data-i18n="sort.asc"></option></select></label>
+            </div>
+
             <div class="row" style="margin-top: 24px;">
               <button type="submit" class="primary" data-i18n="btn.save">Save</button>
               <span class="spacer"></span>
