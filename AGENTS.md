@@ -1,0 +1,96 @@
+# AGENTS.md
+
+Instructions for AI coding agents (and humans) working on this repository. Read this first; it is meant to save you from exploring the code to find where things are.
+
+## Project in one paragraph
+
+OCAP Statistics ingests recordings from an [OCAP2](https://github.com/OCAP2/OCAP) web server (Arma 3 replays), computes player, squad and rotation statistics and serves them through a REST API, a web page and an admin panel. Its reason to exist is to take load off OCAP: each recording is processed **once** into a compact digest stored in SQLite, and every request is answered from that database. Go 1.26, no cgo (pure-Go SQLite), no frontend build step.
+
+The project is open source and community-neutral. Never put community-specific values (OCAP URLs, tags, squad names, rotation sides, logos, titles) into code, defaults, docs, tests or examples — they belong in deployment configuration.
+
+## Commands
+
+| Task | Command |
+|---|---|
+| Build | `make build` (or `go build ./cmd/ocap-stats`) |
+| Tests | `make test` → `go test -race ./...` (race needs cgo; on Windows `CGO_ENABLED=1`) |
+| Quick tests | `go test ./...` |
+| Lint | `make lint` → `go vet ./...` + staticcheck |
+| Vulnerabilities | `make vuln` → govulncheck |
+| Run once | `OCAPSTATS_OCAP_URL=https://ocap.example.com go run ./cmd/ocap-stats -once` |
+| Run server | `OCAPSTATS_OCAP_URL=... OCAPSTATS_ADMIN_PASSWORD=... go run ./cmd/ocap-stats` (site on :5080) |
+| JS syntax | `node --check web/static/*.js web/static/admin/*.js` |
+| HTML/a11y | `npx html-validate@9` with presets `html-validate:recommended` + `html-validate:a11y`, rule `no-inline-style` off |
+
+Definition of done for a change: `gofmt -l .` empty, vet + staticcheck clean, `go test -race ./...` green, JS passes `node --check`, markup passes html-validate, UI changes checked in a browser with axe-core (WCAG 2.2 AA, 0 violations). The pages' CSP blocks CDN scripts: to run axe, copy `axe.min.js` into `web/static` for a throwaway build and delete it before committing.
+
+CI (`.github/workflows/ci.yml`) runs the same checks and publishes `ghcr.io/<owner>/ocap-statistics` for linux/amd64 and linux/arm64 on pushes to `main`.
+
+## Repository map
+
+```
+cmd/ocap-stats/main.go        entry point: config, logging, HTTP server timeouts, graceful shutdown
+internal/config/config.go     Config struct, defaults, OCAPSTATS_* env overrides (env wins over JSON)
+internal/ocap/client.go       OCAP client: ListOperations, OpenMission (data dir first, HTTP fallback, ErrNotFound)
+internal/digest/digest.go     streaming JSON recording parser → Digest (entities, kills, hits, end, vehicle crews)
+internal/stats/compute.go     per-mission rules: Compute, PlayerRow, KillRow, nickname Rules/ParseName
+internal/store/store.go       SQLite schema, migrate(), missions/digests/rows/kills queries, Filter
+internal/store/users.go       admin users and sessions
+internal/report/report.go     aggregation over a period: Player, Squad, Totals, achievements, rotation, sorting
+internal/report/columns.go    custom columns: Column, Variables, NormalizeColumns, ApplyColumns, Preview
+internal/formula/formula.go   formula language: lexer, parser, evaluator (no reflection, no eval)
+internal/settings/settings.go runtime settings: config defaults + admin overrides stored in meta table
+internal/syncer/syncer.go     task loop: sync / recompute / resync, retries, missing recordings
+internal/auth/                PBKDF2 password hashing, session tokens, default admin from env
+internal/api/server.go        Server, routes, error helpers, cached handler, gzip/ETag, middleware
+internal/api/stats.go         public /api/v1 handlers, filters, CSV
+internal/api/admin.go         /api/admin handlers: login, settings, previews, tasks, users
+internal/api/cache.go         response cache + per-filter aggregation cache (singleflight)
+internal/api/static.go        embedded static files, ETag, gzip, per-page CSP
+internal/api/openapi.json     public API spec (admin API intentionally not documented)
+web/static/index.html, app.js site (stats table, achievements, modals, export, screenshots)
+web/static/admin/             admin panel (index.html, admin.js)
+web/static/i18n.js            all UI strings, 5 languages
+web/static/xlsx.js            dependency-free XLSX writer
+web/static/app.css            shared design tokens and components
+```
+
+## How it works
+
+1. **Sync** (`syncer.sync`): list operations from OCAP (settings: tags, since), upsert metadata, delete missions that are no longer listed, then fetch pending ones newest first.
+2. **Ingest** (`syncer.processOne`): read `<dataDir>/<file>.json.gz` or download it, `digest.Parse` → `digest.Encode` (gzip JSON, ~10 KB) → `stats.Compute` → `store.SaveResult` (rows in `mission_players` and `kills`). 404 everywhere → status `missing`, other errors → retries with back-off.
+3. **Serve**: `api.Server.report(filter)` loads rows for a period, `report.Build` aggregates, `ApplyColumns` adds custom columns; cached per data generation.
+4. **Versions**: bump `digest.Version` when extraction changes (stored recordings are fetched again); bump `stats.ComputeVersion` when counting rules change (recomputed from stored digests, no network). Schema changes need `store.migrate` for existing databases.
+
+## Recipes
+
+**Add a per-player statistic** (example: kill assists was added this way)
+1. `stats.PlayerRow` field + counting in `stats.Compute` (+ test in `compute_test.go`, fixture in `testdata/recording.json`); bump `ComputeVersion`. If it needs new recording data, extend `digest` and bump `digest.Version`.
+2. Store: column in `schema`, `migrate()` for old databases, `writeResult` insert, `scanRows` + the `SELECT` lists in `Rows`/`MissionRows`.
+3. Report: fields on `Player`, `Squad`, maybe `Totals`; sums in `Build` and `buildSquads`; sort keys in `SortPlayers`/`SortSquads`; formula variable in `report.Variables` + `playerVars`/`squadVars` (and the variable list in `admin.js` `renderVarList`).
+4. API: `missionRow`/`missionPlayer` in `stats.go`, CSV headers/rows, `openapi.json` schemas.
+5. UI: `<th>` in `index.html` (+ summary row colspan), `row()`, `headerLabels()`, Excel rows/widths, detail tiles and tables in `app.js`; strings in `i18n.js` for all languages; README "How statistics are computed".
+
+**Add a UI string**: add the key to every language block in `web/static/i18n.js` (en, cs, de, pl, uk — key sets must be identical), use `data-i18n` / `data-i18n-placeholder` / `data-i18n-title` / `data-i18n-aria` in markup or `t('key', {var})` in JS.
+
+**Add a setting editable in the admin panel**: field in `settings.Settings` (+ `FromConfig` default from `config`, validation in `Normalize`), decide in `Manager.apply` whether it needs a recompute or sync, form field + `fillForms`/`collectSettings` in `admin.js`, strings in `i18n.js`.
+
+**Add a public endpoint**: handler in `stats.go` returning `(response, error)` wrapped with `s.cached(...)` in `server.go`; add query parameters that affect the result to `cacheParams`; document it in `openapi.json`; add tests in `api_test.go`.
+
+## Conventions and constraints
+
+- **Go**: standard library first; the only dependency is `modernc.org/sqlite`. Errors wrap with `%w`; API errors use `apiError`/`withCode` and are written by `Server.fail`. Comment exported identifiers and non-obvious decisions, not the obvious.
+- **Performance**: never aggregate the database per request outside `Server.report` (it is cached and deduplicated). Keep the digest small; don't store positions.
+- **Security**: strict CSP (no inline scripts, no `eval`, no new script origins; third-party scripts only on demand with SRI); build DOM with `el()` + `textContent`, never `innerHTML` with data; validate settings that reach HTML/CSS; trust `X-Forwarded-*` only with `trustProxy`; admin API stays same-origin with the `X-Requested-With` CSRF header. See `SECURITY.md`.
+- **Accessibility**: real buttons/links for interactive elements, `aria-sort` on sortable headers, WAI-ARIA tabs, modals make `.page` inert, text contrast ≥ 4.5:1 using tokens in `app.css`, user-defined colours never used for text.
+- **Language**: code, comments, docs, commit messages and API messages in technical English. Commits: imperative subject, wrapped body with what and why, no AI attribution lines.
+
+## Gotchas
+
+- `http.ServeMux`: a method-less pattern (`/api/`) conflicts with `GET /` — the static handler is registered on `/` and rejects non-GET itself. Tests build the server with the embedded site, so a conflict panics in `go test`.
+- In `app.js`, class fields and methods share a namespace: a field named like a method (`this.table` vs `table()`) silently replaces the method.
+- OCAP lists recordings by tag with `LIKE`; the syncer keeps exact (case-insensitive) matches only.
+- `killed` events come in two layouts (`[f, "killed", victim, [killer, weapon], dist]` and `[f, "killed", source, target, weapon, dist]`); `causedById` 0 is a real entity id.
+- A vehicle weapon kill is attributed to the gunner (a unit), not the vehicle; crews come from vehicle positions `[pos, dir, alive, [crew ids], [from, to]]`.
+- Saved admin settings override config/env until reset; tests that change config must account for that.
+- `sync.since` / the admin "process recordings from" date also removes older recordings from the database (it mirrors OCAP filtered by the settings).

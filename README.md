@@ -178,6 +178,8 @@ make build   # ./ocap-stats with version information
 
 `ocap-stats -version` prints the build version; `GET /api/v1/status` reports it as well.
 
+Contributors and AI coding agents: start with [AGENTS.md](AGENTS.md) — architecture, where to change what, and the definition of done.
+
 ```
 cmd/ocap-stats      entry point
 internal/ocap       OCAP client (recordings list, recording download / local read)

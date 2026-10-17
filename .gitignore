@@ -6,3 +6,4 @@
 *.db-wal
 /config.json
 /.env
+/.claude/settings.local.json

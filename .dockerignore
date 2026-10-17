@@ -6,3 +6,6 @@ ocap-stats
 ocap-stats.exe
 config.json
 .env
+.claude
+AGENTS.md
+CLAUDE.md
