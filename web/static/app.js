@@ -429,7 +429,8 @@ class StatsApp {
       el('p', {}, t('filters.general')),
       el('label', {}, all, t('filters.allSquads')),
       el('label', {}, solo, t('noSquad')),
-      this.allSquads.length ? el('p', {}, t('filters.squads')) : null,
+      // replaceChildren, unlike el(), would write a null as the text "null".
+      ...(this.allSquads.length ? [el('p', {}, t('filters.squads'))] : []),
       ...this.allSquads.map(squad => {
         const cb = el('input', { type: 'checkbox' });
         cb.checked = this.selected.has(squad);
