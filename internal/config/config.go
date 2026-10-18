@@ -119,6 +119,8 @@ type Stats struct {
 	SquadAliases map[string]string `json:"squadAliases"`
 	// IgnoreNames are extra player names (case-insensitive, without squad prefix) to skip.
 	IgnoreNames []string `json:"ignoreNames"`
+	// Assists configures kill assists for hitting an enemy shortly before its death.
+	Assists stats.Assists `json:"assists"`
 }
 
 type Rotation struct {
@@ -161,6 +163,7 @@ func Default() Config {
 		Stats: Stats{
 			MinDuration:  1200,
 			SquadPattern: stats.DefaultSquadPattern,
+			Assists:      stats.DefaultAssists(),
 		},
 		UI: UI{
 			Title: "OCAP Statistics",
@@ -221,6 +224,7 @@ func applyEnv(cfg *Config) error {
 		"OCAPSTATS_SYNC_ENABLED":         &cfg.Sync.Enabled,
 		"OCAPSTATS_ADMIN_PASSWORD_RESET": &cfg.Admin.ResetPassword,
 		"OCAPSTATS_TRUST_PROXY":          &cfg.TrustProxy,
+		"OCAPSTATS_HIT_ASSISTS":          &cfg.Stats.Assists.Hits,
 	} {
 		if v, ok := os.LookupEnv(key); ok {
 			b, err := strconv.ParseBool(v)
@@ -250,6 +254,13 @@ func applyEnv(cfg *Config) error {
 			return fmt.Errorf("OCAPSTATS_MIN_MISSIONS: %w", err)
 		}
 		cfg.Stats.MinMissions = n
+	}
+	if v, ok := os.LookupEnv("OCAPSTATS_ASSIST_WINDOW"); ok {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("OCAPSTATS_ASSIST_WINDOW: %w", err)
+		}
+		cfg.Stats.Assists.Window = n
 	}
 	for key, dst := range map[string]*Duration{
 		"OCAPSTATS_SYNC_INTERVAL":      &cfg.Sync.Interval,

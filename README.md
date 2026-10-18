@@ -12,7 +12,7 @@ OCAP ──(every 10 min: list of recordings)──► ocap-stats ──► SQLi
 ## Features
 
 - **Automatic ingestion.** New recordings are picked up on a schedule; recordings deleted or re-tagged in OCAP disappear from the statistics. Recordings can be read straight from OCAP's data directory when the service runs on the same host.
-- **Statistics:** kills, deaths, team kills, destroyed vehicles, kill assists (kills by other crew members of your vehicle), accuracy, attendance, K/D, achievements, squad leaderboard, rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), per-mission details.
+- **Statistics:** kills, deaths, team kills, destroyed vehicles, kill assists (kills by other crew members of your vehicle, deaths of enemies you hit shortly before), accuracy, attendance, K/D, achievements, squad leaderboard, rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), per-mission details.
 - **Squads from nicknames.** `[ALPHA] John` is player `John` in squad `ALPHA`; recruits (`[~ALPHA~] John`) count in their squad like everyone else. The nickname format, squad aliases and ignored names are configurable.
 - **REST API** with OpenAPI documentation at `/api/docs`, CSV export, ETag caching and CORS.
 - **Web page** with filters, player/squad views, Excel export, top-10 and rotation screenshots to the clipboard and links to the replays in OCAP.
@@ -94,6 +94,8 @@ Statistics settings (tags, start date, minimum duration, nickname format, aliase
 | `stats.defaultTag` | `OCAPSTATS_DEFAULT_TAG` | all | Tag used when a request has no `tag` |
 | `stats.minDuration` | `OCAPSTATS_MIN_DURATION` | `1200` | Missions shorter than this (seconds) are not counted |
 | `stats.minMissions` | `OCAPSTATS_MIN_MISSIONS` | `0` | Players and squads with fewer missions in the selected period are not listed (their missions still count for their squads) |
+| `stats.assists.hits` | `OCAPSTATS_HIT_ASSISTS` | `true` | Give a kill assist for hitting an enemy shortly before its death |
+| `stats.assists.window` | `OCAPSTATS_ASSIST_WINDOW` | `300` | How long before the death (seconds, 1–3600) a hit counts for an assist |
 | `stats.squadPattern` | `OCAPSTATS_SQUAD_PATTERN` | `\[~?(.*?)~?\]\s*` | Regex for the squad in a nickname; group 1 is the squad, the whole match is cut from the name |
 | `stats.squadAliases` | — | — | Squad spellings merged into one squad, e.g. `{"A.L.P.H.A.": "ALPHA"}` |
 | `stats.ignoreNames` | — | — | Player names never counted (headless clients and `__SERVER__` are always skipped) |
@@ -157,7 +159,7 @@ Per mission:
 Over a period:
 
 - **K/D:** kills / deaths (kills when there are no deaths).
-- **Kill assist:** a kill (not a team kill) made by another crew member of the vehicle the player sat in at that moment, so drivers and commanders get credit for their gunner's kills. Crews are taken from the vehicle positions in the recording.
+- **Kill assist:** a kill (not a team kill) made by another crew member of the vehicle the player sat in at that moment, so drivers and commanders get credit for their gunner's kills (crews are taken from the vehicle positions in the recording); and, unless turned off, the death of an enemy (player or AI) the player hit in the last 5 minutes (`stats.assists.window`) before it, whoever or whatever killed it. Hits before the victim's previous death and hits on vehicles do not count; a player gets at most one assist per death and none for their own kill.
 - **Squads:** a player's results count towards the squad they played in during each mission, so a player who leaves a squad does not take its past results along. The players table shows the squad of the player's latest mission in the period (none if they last played without one). Squad names are merged case-insensitively and shown in their most common spelling.
 - **Best squad award:** an attendance-weighted K/D pulled towards the average for squads with few deaths.
 - **Rotation:** a rotation side wins a mission when the winner of the `endMission` event names the in-game side (EAST, WEST, …) most of its players were on; any other mission is a draw.

@@ -14,7 +14,7 @@ Consequences: statistics lag OCAP by the sync interval; the syncer must be robus
 
 Between "raw recording" and "per-mission statistics rows" the syncer stores a digest: entities, kills, hits, end frame and vehicle crews, gzipped JSON of about 10 KB. Counting rules change more often than the recording format, and the digest lets a rule change be applied to all history without downloading anything again.
 
-Two version numbers drive this: `digest.Version` (what is extracted — bump it and stored recordings are fetched again) and `stats.ComputeVersion` together with the nickname rules (how it is counted — bump it and missions are recomputed from digests, offline). Positions are not stored; a statistic that needs them requires a digest change.
+Two version numbers drive this: `digest.Version` (what is extracted — bump it and stored recordings are fetched again) and `stats.ComputeVersion` together with the nickname and assist rules (how it is counted — bump it and missions are recomputed from digests, offline). Positions are not stored; a statistic that needs them requires a digest change.
 
 ## 3. SQLite through modernc.org/sqlite (pure Go)
 

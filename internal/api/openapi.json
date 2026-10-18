@@ -1019,7 +1019,7 @@
           },
           "killAssists": {
             "type": "integer",
-            "description": "Kills made by another crew member of the vehicle the player was in"
+            "description": "Kills made by another crew member of the vehicle the player was in, and deaths of enemies the player hit shortly before (see the README)"
           },
           "custom": {
             "type": "object",
@@ -1082,7 +1082,7 @@
           },
           "killAssists": {
             "type": "integer",
-            "description": "Kills made by another crew member of the vehicle the player was in"
+            "description": "Kills made by another crew member of the vehicle the player was in, and deaths of enemies the player hit shortly before (see the README)"
           },
           "custom": {
             "type": "object",

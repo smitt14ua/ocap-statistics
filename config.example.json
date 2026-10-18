@@ -36,7 +36,11 @@
     "squadAliases": {
       "A.L.P.H.A.": "ALPHA"
     },
-    "ignoreNames": []
+    "ignoreNames": [],
+    "assists": {
+      "hits": true,
+      "window": 300
+    }
   },
   "rotation": {
     "since": "2026-01-01",

@@ -156,10 +156,65 @@ func TestCompute(t *testing.T) {
 	}
 }
 
+func TestHitAssists(t *testing.T) {
+	d, err := digest.Parse(strings.NewReader(`{"captureDelay": 1, "entities": [
+		{"id": 0, "name": "Alpha", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 1, "name": "Bravo", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 2, "name": "Enemy", "side": "EAST", "isPlayer": 1, "type": "unit"},
+		{"id": 3, "name": "Rifleman", "side": "EAST", "isPlayer": 0, "type": "unit"},
+		{"id": 4, "name": "Friend", "side": "WEST", "isPlayer": 0, "type": "unit"}
+	], "events": [
+		[10, "hit", 3, [1, "M4"], 50], [15, "hit", 3, [1, "M4"], 50], [16, "hit", 3, [0, "M4"], 50],
+		[20, "killed", 3, [0, "M4"], 50],
+		[30, "hit", 2, [1, "M4"], 50], [30, "hit", 2, [0, "M4"], 50],
+		[40, "killed", 2, ["null", ""], 0],
+		[500, "killed", 2, [4, "AK"], 50],
+		[600, "hit", 2, [1, "M4"], 50],
+		[1000, "killed", 2, [2, "Grenade"], 0],
+		[1100, "hit", 4, [0, "M4"], 50],
+		[1110, "killed", 4, [2, "AK"], 50]
+	]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assists := func(a Assists) map[string]int {
+		rules, err := NewRules(DefaultNickname(), a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]int{}
+		for _, p := range Compute(d, rules).Players {
+			got[p.Name] = p.KillAssists
+		}
+		return got
+	}
+	// Bravo: the rifleman Alpha killed (two hits, one assist) and the enemy who died without a
+	// killer. Alpha: only that enemy, not his own kill. None for the death at 500 (hits before
+	// the previous death), at 1000 (hit 400 s earlier) or for the friendly AI Alpha hit.
+	if got := assists(DefaultAssists()); got["Alpha"] != 1 || got["Bravo"] != 2 || got["Enemy"] != 0 {
+		t.Errorf("assists = %v, want Alpha 1, Bravo 2, Enemy 0", got)
+	}
+	if got := assists(Assists{Hits: true, Window: 500}); got["Bravo"] != 3 {
+		t.Errorf("assists with a 500 s window = %v, want Bravo 3", got)
+	}
+	if got := assists(Assists{Window: 300}); got["Alpha"] != 0 || got["Bravo"] != 0 {
+		t.Errorf("assists with hits off = %v, want none", got)
+	}
+	for _, w := range []int{0, MaxAssistWindow + 1} {
+		if _, err := NewRules(DefaultNickname(), Assists{Hits: true, Window: w}); err == nil {
+			t.Errorf("window %d accepted", w)
+		}
+	}
+	off, _ := NewRules(DefaultNickname(), Assists{Window: 300})
+	if off.Key() == DefaultRules().Key() {
+		t.Error("assist settings do not change the rules key")
+	}
+}
+
 func TestIgnoreNames(t *testing.T) {
 	n := DefaultNickname()
 	n.IgnoreNames = []string{"rookie"}
-	rules, err := NewRules(n)
+	rules, err := NewRules(n, DefaultAssists())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +230,7 @@ func TestCustomNickname(t *testing.T) {
 	rules, err := NewRules(Nickname{
 		SquadPattern: `^(\w+)\|`,
 		Aliases:      map[string]string{"stars": "S.T.A.R.S."},
-	})
+	}, DefaultAssists())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +248,7 @@ func TestCustomNickname(t *testing.T) {
 	}
 
 	for _, bad := range []Nickname{{SquadPattern: `[`}, {SquadPattern: `\[.*\]`}} {
-		if _, err := NewRules(bad); err == nil {
+		if _, err := NewRules(bad, DefaultAssists()); err == nil {
 			t.Errorf("NewRules(%+v) accepted an invalid format", bad)
 		}
 	}

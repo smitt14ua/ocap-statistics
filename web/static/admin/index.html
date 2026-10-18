@@ -20,8 +20,10 @@
     input, select { width: 100%; }
     .inline { width: auto; }
     input[type="color"] { padding: 2px; height: 36px; width: 56px; }
-    label.field { display: flex; flex-direction: column; gap: 4px; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
     label.field > span { font-size: 12px; color: var(--muted); }
+    .check { display: flex; align-items: center; gap: 8px; color: var(--text-strong); }
+    .check input { width: 24px; height: 24px; margin: 0; accent-color: var(--accent); }
     .hint { font-size: 12px; color: var(--dim); }
 
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
@@ -166,6 +168,17 @@
                 <span class="hint" data-i18n="f.minDuration.hint"></span></label>
               <label class="field"><span data-i18n="f.minMissions">Minimum missions</span><input id="sMinMissions" type="number" min="0" step="1">
                 <span class="hint" data-i18n="f.minMissions.hint"></span></label>
+            </div>
+
+            <h2 class="section-title" data-i18n="sec.assists">Kill assists</h2>
+            <p class="hint" data-i18n="assists.hint" style="margin-bottom: 12px;"></p>
+            <div class="grid">
+              <div class="field">
+                <label class="check"><input id="sHitAssists" type="checkbox"><span data-i18n="f.hitAssists">Assists for hits</span></label>
+                <span class="hint" data-i18n="f.hitAssists.hint"></span>
+              </div>
+              <label class="field"><span data-i18n="f.assistWindow">Hit counts for, min</span><input id="sAssistWindow" type="number" min="0.5" max="60" step="0.5">
+                <span class="hint" data-i18n="f.assistWindow.hint"></span></label>
             </div>
 
             <h2 class="section-title" data-i18n="sec.rotation">Rotation</h2>

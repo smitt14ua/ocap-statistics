@@ -183,6 +183,20 @@ func TestAdminSettingsAndTasks(t *testing.T) {
 	if rec := c.do(http.MethodPut, "/api/admin/settings", bad); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid settings: %d", rec.Code)
 	}
+	bad = set
+	bad.Assists.Window = 0
+	if rec := c.do(http.MethodPut, "/api/admin/settings", bad); rec.Code != http.StatusBadRequest {
+		t.Errorf("invalid assist window: %d", rec.Code)
+	}
+
+	// Assist settings are counting rules too: changing them recomputes.
+	if !set.Assists.Hits || set.Assists.Window != 300 {
+		t.Errorf("default assists: %+v", set.Assists)
+	}
+	set.Assists.Hits = false
+	if rec := c.do(http.MethodPut, "/api/admin/settings", set); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"rules":true`) {
+		t.Errorf("save assists: %d %s", rec.Code, rec.Body)
+	}
 
 	// A full resync downloads everything again.
 	if rec := c.do(http.MethodPost, "/api/admin/tasks/resync", nil); rec.Code != http.StatusAccepted {

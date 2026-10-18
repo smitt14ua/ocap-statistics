@@ -175,6 +175,7 @@ class Admin {
     }));
 
     $('settingsForm').addEventListener('input', () => { this.formDirty = true; });
+    $('sHitAssists').addEventListener('change', () => { $('sAssistWindow').disabled = !$('sHitAssists').checked; });
     $('nickForm').addEventListener('input', () => { this.formDirty = true; });
     $('settingsForm').addEventListener('submit', (ev) => { ev.preventDefault(); this.save(); });
     $('nickForm').addEventListener('submit', (ev) => { ev.preventDefault(); this.save(); });
@@ -317,6 +318,10 @@ class Admin {
     $('sSince').value = s.since || '';
     $('sMinDuration').value = Math.round((s.minDuration || 0) / 60);
     $('sMinMissions').value = s.minMissions || 0;
+    const assists = s.assists || { hits: true, window: 300 };
+    $('sHitAssists').checked = !!assists.hits;
+    $('sAssistWindow').value = (assists.window || 300) / 60;
+    $('sAssistWindow').disabled = !assists.hits;
     $('sRotationSince').value = s.rotation.since || '';
     $('sides').replaceChildren();
     (s.rotation.sides || []).forEach(side => this.addSide(side));
@@ -456,6 +461,7 @@ class Admin {
       minDuration: Number($('sMinDuration').value || 0) * 60,
       minMissions: Math.max(0, Math.round(Number($('sMinMissions').value || 0))),
       nickname: this.collectNickname(),
+      assists: { hits: $('sHitAssists').checked, window: Math.round(Number($('sAssistWindow').value || 0) * 60) },
       columns: [...$('columns').querySelectorAll('.column-card')].map(card => this.columnFrom(card)),
       sort: {
         players: { field: $('sortPlayersField').value, order: $('sortPlayersOrder').value },

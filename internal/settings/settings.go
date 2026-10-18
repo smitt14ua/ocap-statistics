@@ -37,6 +37,7 @@ type Settings struct {
 	// and achievements (see report.Result.Hide). 0 or 1 shows everyone.
 	MinMissions int             `json:"minMissions"`
 	Nickname    stats.Nickname  `json:"nickname"`
+	Assists     stats.Assists   `json:"assists"`
 	Rotation    config.Rotation `json:"rotation"`
 	// Columns are custom statistics columns defined in the admin panel.
 	Columns []report.Column `json:"columns"`
@@ -99,6 +100,7 @@ func FromConfig(cfg config.Config) Settings {
 			Aliases:      maps.Clone(cfg.Stats.SquadAliases),
 			IgnoreNames:  slices.Clone(cfg.Stats.IgnoreNames),
 		},
+		Assists:  cfg.Stats.Assists,
 		Rotation: cfg.Rotation,
 		Sort:     DefaultSort{Players: defaultSortOrder, Squads: defaultSortOrder},
 	}
@@ -122,7 +124,7 @@ func (s *Settings) Normalize() (*stats.Rules, error) {
 	if s.Nickname.Aliases == nil {
 		s.Nickname.Aliases = map[string]string{}
 	}
-	rules, err := stats.NewRules(s.Nickname)
+	rules, err := stats.NewRules(s.Nickname, s.Assists)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +181,7 @@ func checkDate(field, v string) error {
 
 // Change tells what a settings update affects.
 type Change struct {
-	// Rules: nickname rules changed, statistics must be recomputed.
+	// Rules: nickname or assist rules changed, statistics must be recomputed.
 	Rules bool `json:"rules"`
 	// Sync: the set of ingested recordings changed, a sync is needed.
 	Sync bool `json:"sync"`

@@ -379,7 +379,7 @@ func (s *Server) previewNames(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	rules, err := stats.NewRules(req.Nickname)
+	rules, err := stats.NewRules(req.Nickname, stats.DefaultAssists())
 	if err != nil {
 		s.fail(w, r, withCode(http.StatusBadRequest, "invalid_settings", err.Error()))
 		return

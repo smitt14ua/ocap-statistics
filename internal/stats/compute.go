@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strings"
@@ -17,7 +18,8 @@ import (
 
 // ComputeVersion changes whenever the per-mission rules below change. Stored missions computed
 // with another version or nickname format are recomputed from their digests.
-const ComputeVersion = 2
+// Version 3 added kill assists for hits.
+const ComputeVersion = 3
 
 // Victim kinds stored with kills.
 const (
@@ -37,7 +39,8 @@ type PlayerRow struct {
 	Deaths       int    `json:"deaths"`
 	TeamKills    int    `json:"teamKills"`
 	VehicleKills int    `json:"vehiclesDestroyed"`
-	// KillAssists counts kills made by another crew member of the vehicle the player sat in.
+	// KillAssists counts kills made by another crew member of the vehicle the player sat in
+	// and deaths of enemies the player hit shortly before (see Compute).
 	KillAssists int `json:"killAssists"`
 	Shots       int `json:"shotsFired"`
 	Hits        int `json:"hits"`
@@ -88,17 +91,37 @@ func DefaultNickname() Nickname {
 	return Nickname{SquadPattern: DefaultSquadPattern}
 }
 
-// Rules is a compiled Nickname.
+// Assists configures kill assists for hits. It is editable in the admin panel.
+type Assists struct {
+	// Hits gives an assist for hitting an enemy shortly before its death.
+	Hits bool `json:"hits"`
+	// Window (seconds) is how long before the death a hit still counts.
+	Window int `json:"window"`
+}
+
+// DefaultAssists counts hits within five minutes before a death.
+func DefaultAssists() Assists {
+	return Assists{Hits: true, Window: 300}
+}
+
+// MaxAssistWindow is the largest allowed Assists.Window (seconds).
+const MaxAssistWindow = 3600
+
+// Rules is a compiled Nickname together with the other per-mission counting settings.
 type Rules struct {
 	squadRe *regexp.Regexp
 	aliases map[string]string
 	ignore  map[string]bool
+	assists Assists
 	key     string
 }
 
-// NewRules validates and compiles a nickname format.
-func NewRules(n Nickname) (*Rules, error) {
-	r := &Rules{aliases: map[string]string{}, ignore: map[string]bool{}}
+// NewRules validates and compiles a nickname format and the assist settings.
+func NewRules(n Nickname, a Assists) (*Rules, error) {
+	if a.Window < 1 || a.Window > MaxAssistWindow {
+		return nil, fmt.Errorf("assists: window must be between 1 and %d seconds", MaxAssistWindow)
+	}
+	r := &Rules{aliases: map[string]string{}, ignore: map[string]bool{}, assists: a}
 	var err error
 	if r.squadRe, err = regexp.Compile(n.SquadPattern); err != nil {
 		return nil, fmt.Errorf("squad pattern: %w", err)
@@ -118,15 +141,18 @@ func NewRules(n Nickname) (*Rules, error) {
 		}
 	}
 	// The key identifies the rules: statistics computed with another key are recomputed.
-	b, _ := json.Marshal(n) // map keys are sorted, so the encoding is stable
+	b, _ := json.Marshal(struct { // map keys are sorted, so the encoding is stable
+		N Nickname
+		A Assists
+	}{n, a})
 	sum := sha256.Sum256(append([]byte(fmt.Sprintf("v%d:", ComputeVersion)), b...))
 	r.key = hex.EncodeToString(sum[:8])
 	return r, nil
 }
 
-// DefaultRules returns compiled DefaultNickname rules.
+// DefaultRules returns compiled DefaultNickname and DefaultAssists rules.
 func DefaultRules() *Rules {
-	r, err := NewRules(DefaultNickname())
+	r, err := NewRules(DefaultNickname(), DefaultAssists())
 	if err != nil {
 		panic(err)
 	}
@@ -173,17 +199,16 @@ func (r *Rules) ValidPlayer(name string) bool {
 	return !r.ignore[l]
 }
 
-// creditAssists gives a kill assist to every other player in the vehicle the killer was in.
+// creditCrewAssists gives a kill assist to every other player in the vehicle the killer was in.
 // Crews are recorded per frame, so the frame before the kill is checked too (the killer may
 // have left the vehicle in the same frame).
-func creditAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k digest.Kill, killer *PlayerRow) {
+func creditCrewAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k digest.Kill, credited map[*PlayerRow]bool) {
 	for _, frame := range []int{k.Frame, k.Frame - 1} {
 		for _, v := range vehicles {
 			crew := v.CrewAt(frame)
 			if !slices.Contains(crew, k.Killer) {
 				continue
 			}
-			credited := map[*PlayerRow]bool{killer: true}
 			for _, id := range crew {
 				if p := playerOf[id]; p != nil && !credited[p] {
 					p.KillAssists++
@@ -191,6 +216,28 @@ func creditAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k dig
 				}
 			}
 			return
+		}
+	}
+}
+
+// creditHitAssists gives a kill assist to every player of another side who hit the victim
+// after `from` and up to the death frame.
+func creditHitAssists(hits []digest.Hit, playerOf map[int]*PlayerRow, sideOf func(int) string, k digest.Kill, from int, credited map[*PlayerRow]bool) {
+	vs := sideOf(k.Victim)
+	if vs == "" {
+		return
+	}
+	for _, h := range hits {
+		if h.Frame <= from || h.Frame > k.Frame {
+			continue
+		}
+		p := playerOf[h.Shooter]
+		if p == nil || credited[p] {
+			continue
+		}
+		if ss := sideOf(h.Shooter); ss != "" && ss != vs {
+			p.KillAssists++
+			credited[p] = true
 		}
 	}
 }
@@ -205,7 +252,10 @@ func creditAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k dig
 //   - death: "killed" event whose victim is a player (suicides included);
 //   - hits: "hit" events by a player on a non-vehicle target; shots: fired frames;
 //   - kill assist: a kill (not a team kill) made by another crew member of the vehicle the
-//     player was in at that moment (drivers and commanders of the gunner).
+//     player was in at that moment (drivers and commanders of the gunner), or the death of an
+//     enemy (player or AI, whoever or whatever killed it) the player hit within Assists.Window
+//     seconds before it and after its previous death, when Assists.Hits is on; at most one
+//     assist per death, and never for the player's own kill.
 func Compute(d *digest.Digest, rules *Rules) MissionResult {
 	res := MissionResult{Duration: d.Duration()}
 	if d.End != nil {
@@ -266,6 +316,17 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 		}
 	}
 
+	delay := d.CaptureDelay
+	if delay <= 0 {
+		delay = 1
+	}
+	assistFrames := int(math.Ceil(float64(rules.assists.Window) / delay))
+	hitsOn := map[int][]digest.Hit{} // victim id -> hits in recording order
+	for _, h := range d.Hits {
+		hitsOn[h.Victim] = append(hitsOn[h.Victim], h)
+	}
+	lastDeath := map[int]int{} // entity id -> frame of its previous death (respawned players)
+
 	for _, k := range d.Kills {
 		victimEnt := entities[k.Victim]
 		isVehicle := victimEnt != nil && victimEnt.Type == "vehicle"
@@ -275,7 +336,9 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 			killer = playerOf[k.Killer]
 		}
 		teamKill := false
+		credited := map[*PlayerRow]bool{}
 		if killer != nil {
+			credited[killer] = true
 			if isVehicle {
 				killer.VehicleKills++
 			} else {
@@ -286,9 +349,17 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 					teamKill = true
 				}
 				if !teamKill {
-					creditAssists(vehicles, playerOf, k, killer)
+					creditCrewAssists(vehicles, playerOf, k, credited)
 				}
 			}
+		}
+		if !isVehicle && rules.assists.Hits {
+			from := k.Frame - assistFrames
+			if prev, ok := lastDeath[k.Victim]; ok && prev > from {
+				from = prev
+			}
+			creditHitAssists(hitsOn[k.Victim], playerOf, sideOf, k, from, credited)
+			lastDeath[k.Victim] = k.Frame
 		}
 		if victim != nil && !isVehicle {
 			victim.Deaths++
