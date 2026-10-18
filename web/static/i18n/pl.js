@@ -359,4 +359,8 @@
   'feed.vehicle': 'pojazd',
   'assist.crew': 'Asysta: zabójstwo przez załogę jego pojazdu',
   'assist.hit': 'Asysta: trafił ofiarę krótko przed jej śmiercią',
+  'feed.cause.vehicle': 'z pojazdem',
+  'feed.cause.vehicle.title': 'Nagranie nie podaje zabójcy: ofiara zginęła w pojeździe, który zniszczył ten gracz',
+  'feed.cause.lastHit': 'ostatnie trafienie',
+  'feed.cause.lastHit.title': 'Nagranie nie podaje zabójcy (samobójstwo, utonięcie, wrak): zabójstwo zalicza się wrogowi, który trafił ofiarę jako ostatni',
 };

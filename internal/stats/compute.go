@@ -18,8 +18,9 @@ import (
 
 // ComputeVersion changes whenever the per-mission rules below change. Stored missions computed
 // with another version or nickname format are recomputed from their digests.
-// Version 3 added kill assists for hits; version 4 records who got each assist.
-const ComputeVersion = 4
+// Version 3 added kill assists for hits; version 4 records who got each assist; version 5
+// credits deaths without a killer to the enemy who damaged the victim last.
+const ComputeVersion = 5
 
 // Victim kinds stored with kills.
 const (
@@ -61,7 +62,17 @@ type KillRow struct {
 	Weapon         string  `json:"weapon"`
 	Distance       float64 `json:"distance"`
 	TeamKill       bool    `json:"teamKill"`
+	// Cause is empty for a killer the recording names, otherwise why the kill was credited
+	// (CauseVehicle, CauseLastHit).
+	Cause string `json:"cause,omitempty"`
 }
+
+// Causes of credited kills: the recording has no killer for the death (a suicide, no killer
+// or a wreck), and the kill goes to the enemy who last damaged the victim (see Compute).
+const (
+	CauseVehicle = "vehicle" // the victim died with the vehicle the killer destroyed
+	CauseLastHit = "lastHit" // the killer hit the victim last
+)
 
 // Assist kinds stored with assists.
 const (
@@ -237,14 +248,14 @@ func (c *credits) add(p *PlayerRow, kind string) {
 	c.kinds = append(c.kinds, kind)
 }
 
-// creditCrewAssists gives a kill assist to every other player in the vehicle the killer was in.
-// Crews are recorded per frame, so the frame before the kill is checked too (the killer may
+// creditCrewAssists gives a kill assist to every other player in the vehicle the killer was in
+// at a frame. Crews are recorded per frame, so the frame before is checked too (the killer may
 // have left the vehicle in the same frame).
-func creditCrewAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k digest.Kill, c *credits) {
-	for _, frame := range []int{k.Frame, k.Frame - 1} {
+func creditCrewAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, killer, frame int, c *credits) {
+	for _, f := range []int{frame, frame - 1} {
 		for _, v := range vehicles {
-			crew := v.CrewAt(frame)
-			if !slices.Contains(crew, k.Killer) {
+			crew := v.CrewAt(f)
+			if !slices.Contains(crew, killer) {
 				continue
 			}
 			for _, id := range crew {
@@ -255,21 +266,43 @@ func creditCrewAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k
 	}
 }
 
-// creditHitAssists gives a kill assist to every player of another side who hit the victim
-// after `from` and up to the death frame.
-func creditHitAssists(hits []digest.Hit, playerOf map[int]*PlayerRow, sideOf func(int) string, k digest.Kill, from int, c *credits) {
+// damage is a hit on a unit, or the destruction of the vehicle the unit sat in.
+type damage struct {
+	frame, shooter int
+	// Destroying a vehicle: its weapon and distance, so a crew kill credited for it shows them.
+	vehicle  bool
+	weapon   string
+	distance float64
+}
+
+// enemyDamage returns, latest first, the damage enemies of the victim did to it after `from`
+// and up to its death.
+func enemyDamage(hits []damage, sideOf func(int) string, k digest.Kill, from int) []damage {
 	vs := sideOf(k.Victim)
 	if vs == "" {
-		return
+		return nil
 	}
-	for _, h := range hits {
-		if h.Frame <= from || h.Frame > k.Frame {
+	var out []damage
+	for _, h := range slices.Backward(hits) {
+		if h.frame <= from || h.frame > k.Frame || h.shooter == k.Victim {
 			continue
 		}
-		if ss := sideOf(h.Shooter); ss != "" && ss != vs {
-			c.add(playerOf[h.Shooter], AssistHit)
+		if ss := sideOf(h.shooter); ss != "" && ss != vs {
+			out = append(out, h)
 		}
 	}
+	return out
+}
+
+// noKiller reports whether the recording names nobody who caused a death: no killer, the
+// victim itself (OCAP writes deaths in a destroyed vehicle, drowning and falls this way), or
+// a vehicle (a wreck or a collision).
+func noKiller(k digest.Kill, entities map[int]*digest.Entity) bool {
+	if k.Killer < 0 || k.Killer == k.Victim {
+		return true
+	}
+	e := entities[k.Killer]
+	return e == nil || e.Type == "vehicle"
 }
 
 // Compute derives per-player statistics for one mission.
@@ -278,13 +311,18 @@ func creditHitAssists(hits []digest.Hit, playerOf map[int]*PlayerRow, sideOf fun
 //   - a player is an entity with isPlayer=1; entities with the same clean name are merged;
 //   - kill: "killed" event whose killer is a player and not the victim; killing a vehicle
 //     counts as "vehicles destroyed" instead of a kill;
+//   - a death without a killer (see noKiller) goes to the enemy who last damaged the victim
+//     within Assists.Window seconds and after its previous death: who last hit it, or who
+//     destroyed the vehicle it sat in (its crew dies "by suicide" in the recording);
+//     damage by a team mate does not count;
 //   - team kill: a kill where killer and victim (both players) are on the same side;
 //   - death: "killed" event whose victim is a player (suicides included);
 //   - hits: "hit" events by a player on a non-vehicle target; shots: fired frames;
 //   - kill assist: a kill (not a team kill) made by another crew member of the vehicle the
 //     player was in at that moment (drivers and commanders of the gunner), or the death of an
-//     enemy (player or AI, whoever or whatever killed it) the player hit within Assists.Window
-//     seconds before it and after its previous death, when Assists.Hits is on; at most one
+//     enemy (player or AI, whoever or whatever killed it) the player damaged (hit, or destroyed
+//     its vehicle) within Assists.Window seconds before it and after its previous death, when
+//     Assists.Hits is on; at most one
 //     assist per death, and never for the player's own kill. Every assist is also listed in
 //     MissionResult.Assists with the death it was given for.
 func Compute(d *digest.Digest, rules *Rules) MissionResult {
@@ -353,9 +391,26 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 	}
 	res.CaptureDelay = delay
 	assistFrames := int(math.Ceil(float64(rules.assists.Window) / delay))
-	hitsOn := map[int][]digest.Hit{} // victim id -> hits in recording order
+	// Damage on each unit in frame order: its hits, and the destruction of the vehicle it sat in.
+	hitsOn := map[int][]damage{}
 	for _, h := range d.Hits {
-		hitsOn[h.Victim] = append(hitsOn[h.Victim], h)
+		hitsOn[h.Victim] = append(hitsOn[h.Victim], damage{frame: h.Frame, shooter: h.Shooter})
+	}
+	for _, k := range d.Kills {
+		v := entities[k.Victim]
+		if v == nil || v.Type != "vehicle" || k.Killer < 0 || k.Killer == k.Victim {
+			continue
+		}
+		crew := v.CrewAt(k.Frame)
+		if len(crew) == 0 {
+			crew = v.CrewAt(k.Frame - 1)
+		}
+		for _, id := range crew {
+			hitsOn[id] = append(hitsOn[id], damage{frame: k.Frame, shooter: k.Killer, vehicle: true, weapon: k.Weapon, distance: k.Distance})
+		}
+	}
+	for _, hs := range hitsOn {
+		slices.SortStableFunc(hs, func(a, b damage) int { return a.frame - b.frame })
 	}
 	lastDeath := map[int]int{} // entity id -> frame of its previous death (respawned players)
 
@@ -363,6 +418,28 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 		victimEnt := entities[k.Victim]
 		isVehicle := victimEnt != nil && victimEnt.Type == "vehicle"
 		victim := playerOf[k.Victim]
+
+		var damaged []damage // enemy damage on a soldier before this death, latest first
+		if !isVehicle {
+			from := k.Frame - assistFrames
+			if prev, ok := lastDeath[k.Victim]; ok && prev > from {
+				from = prev
+			}
+			damaged = enemyDamage(hitsOn[k.Victim], sideOf, k, from)
+			lastDeath[k.Victim] = k.Frame
+		}
+		// A death the recording names no killer for goes to whoever damaged the victim last; the
+		// assists of their crew are those of the moment of that damage.
+		cause, crewFrame := "", k.Frame
+		if len(damaged) > 0 && noKiller(k, entities) {
+			last := damaged[0]
+			k.Killer, k.Weapon, k.Distance, crewFrame = last.shooter, last.weapon, last.distance, last.frame
+			cause = CauseLastHit
+			if last.vehicle {
+				cause = CauseVehicle
+			}
+		}
+
 		var killer *PlayerRow
 		if k.Killer >= 0 && k.Killer != k.Victim {
 			killer = playerOf[k.Killer]
@@ -381,17 +458,14 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 					teamKill = true
 				}
 				if !teamKill {
-					creditCrewAssists(vehicles, playerOf, k, credited)
+					creditCrewAssists(vehicles, playerOf, k.Killer, crewFrame, credited)
 				}
 			}
 		}
-		if !isVehicle && rules.assists.Hits {
-			from := k.Frame - assistFrames
-			if prev, ok := lastDeath[k.Victim]; ok && prev > from {
-				from = prev
+		if rules.assists.Hits {
+			for _, h := range slices.Backward(damaged) {
+				credited.add(playerOf[h.shooter], AssistHit)
 			}
-			creditHitAssists(hitsOn[k.Victim], playerOf, sideOf, k, from, credited)
-			lastDeath[k.Victim] = k.Frame
 		}
 		if victim != nil && !isVehicle {
 			victim.Deaths++
@@ -401,7 +475,7 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 		}
 
 		row := KillRow{
-			Frame: k.Frame, Weapon: k.Weapon, Distance: k.Distance, TeamKill: teamKill,
+			Frame: k.Frame, Weapon: k.Weapon, Distance: k.Distance, TeamKill: teamKill, Cause: cause,
 			KillerSide: sideOf(k.Killer), VictimSide: sideOf(k.Victim),
 		}
 		switch {

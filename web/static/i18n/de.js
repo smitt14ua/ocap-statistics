@@ -359,4 +359,8 @@
   'feed.vehicle': 'Fahrzeug',
   'assist.crew': 'Assist: Kill durch die Besatzung seines Fahrzeugs',
   'assist.hit': 'Assist: hat das Opfer kurz vor seinem Tod getroffen',
+  'feed.cause.vehicle': 'mit Fahrzeug',
+  'feed.cause.vehicle.title': 'Die Aufzeichnung nennt keinen Schützen: Das Opfer starb im Fahrzeug, das dieser Spieler zerstört hat',
+  'feed.cause.lastHit': 'letzter Treffer',
+  'feed.cause.lastHit.title': 'Die Aufzeichnung nennt keinen Schützen (Selbstmord, Ertrinken, Wrack): Der Kill geht an den Gegner, der das Opfer zuletzt getroffen hat',
 };

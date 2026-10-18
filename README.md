@@ -151,6 +151,7 @@ Responses are cached in memory until the data changes and carry an `ETag`, so cl
 Per mission:
 
 - **Kill:** a `killed` event whose killer is a player other than the victim. Destroying a vehicle counts as a destroyed vehicle, not a kill.
+- **Death without a killer:** OCAP writes the crew of a destroyed vehicle, drownings, falls and the like as suicides, without a killer or as killed by a wreck. Such a death goes to the enemy (player or AI) who last damaged the victim within the assist window and after its previous death: who last hit it, or who destroyed the vehicle it sat in (then the destroyer's own crew get crew assists for it). Damage by team mates does not count; without enemy damage the death stays a suicide. Such kills do not count for the longest kill.
 - **Team kill:** a kill of a player on the killer's side.
 - **Death:** a `killed` event whose victim is a player (suicides included).
 - **Accuracy:** hits by the player on non-vehicle targets / shots fired × 100.
@@ -159,7 +160,7 @@ Per mission:
 Over a period:
 
 - **K/D:** kills / deaths (kills when there are no deaths).
-- **Kill assist:** a kill (not a team kill) made by another crew member of the vehicle the player sat in at that moment, so drivers and commanders get credit for their gunner's kills (crews are taken from the vehicle positions in the recording); and, unless turned off, the death of an enemy (player or AI) the player hit in the last 5 minutes (`stats.assists.window`) before it, whoever or whatever killed it. Hits before the victim's previous death and hits on vehicles do not count; a player gets at most one assist per death and none for their own kill.
+- **Kill assist:** a kill (not a team kill) made by another crew member of the vehicle the player sat in at that moment, so drivers and commanders get credit for their gunner's kills (crews are taken from the vehicle positions in the recording); and, unless turned off, the death of an enemy (player or AI) the player hit, or whose vehicle the player destroyed, in the last 5 minutes (`stats.assists.window`) before it, whoever or whatever killed it. Hits before the victim's previous death and hits on vehicles do not count; a player gets at most one assist per death and none for their own kill.
 - **Squads:** a player's results count towards the squad they played in during each mission, so a player who leaves a squad does not take its past results along. The players table shows the squad of the player's latest mission in the period (none if they last played without one). Squad names are merged case-insensitively and shown in their most common spelling.
 - **Best squad award:** an attendance-weighted K/D pulled towards the average for squads with few deaths.
 - **Rotation:** a rotation side wins a mission when the winner of the `endMission` event names the in-game side (EAST, WEST, …) most of its players were on; any other mission is a draw.

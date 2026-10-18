@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS kills (
 	vehicle_class    TEXT    NOT NULL,
 	weapon           TEXT    NOT NULL,
 	distance         REAL    NOT NULL,
-	team_kill        INTEGER NOT NULL
+	team_kill        INTEGER NOT NULL,
+	cause            TEXT    NOT NULL DEFAULT '' -- stats.KillRow.Cause
 );
 CREATE INDEX IF NOT EXISTS idx_kills_mission ON kills(mission_id);
 CREATE INDEX IF NOT EXISTS idx_kills_killer ON kills(killer);
@@ -166,6 +167,8 @@ func migrate(db *sql.DB) error {
 		{"mission_players", "kill_assists", "INTEGER NOT NULL DEFAULT 0"},
 		// Filled when ComputeVersion 4 recomputes the missions from their digests.
 		{"missions", "capture_delay", "REAL NOT NULL DEFAULT 1"},
+		// Filled when ComputeVersion 5 recomputes the missions.
+		{"kills", "cause", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		var n int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&n); err != nil {
@@ -395,15 +398,15 @@ func writeResult(ctx context.Context, tx *sql.Tx, id int64, computeKey string, r
 	}
 	kst, err := tx.PrepareContext(ctx, `INSERT INTO kills
 		(mission_id, frame, killer, killer_squad, killer_side, killer_is_player, victim, victim_squad, victim_side,
-		 victim_kind, vehicle_class, weapon, distance, team_kill)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		 victim_kind, vehicle_class, weapon, distance, team_kill, cause)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer kst.Close()
 	for _, k := range res.Kills {
 		if _, err := kst.ExecContext(ctx, id, k.Frame, k.Killer, k.KillerSquad, k.KillerSide, k.KillerIsPlayer,
-			k.Victim, k.VictimSquad, k.VictimSide, k.VictimKind, k.VehicleClass, k.Weapon, k.Distance, k.TeamKill); err != nil {
+			k.Victim, k.VictimSquad, k.VictimSide, k.VictimKind, k.VehicleClass, k.Weapon, k.Distance, k.TeamKill, k.Cause); err != nil {
 			return err
 		}
 	}
@@ -666,21 +669,22 @@ type Kill struct {
 }
 
 const killCols = `k.mission_id, m.date, k.frame, k.killer, k.killer_squad, k.killer_side,
-		k.killer_is_player, k.victim, k.victim_squad, k.victim_side, k.victim_kind, k.vehicle_class, k.weapon, k.distance, k.team_kill`
+		k.killer_is_player, k.victim, k.victim_squad, k.victim_side, k.victim_kind, k.vehicle_class, k.weapon, k.distance, k.team_kill, k.cause`
 
 func scanKill(sc interface{ Scan(...any) error }) (Kill, error) {
 	var k Kill
 	err := sc.Scan(&k.MissionID, &k.Date, &k.Frame, &k.Killer, &k.KillerSquad, &k.KillerSide, &k.KillerIsPlayer,
-		&k.Victim, &k.VictimSquad, &k.VictimSide, &k.VictimKind, &k.VehicleClass, &k.Weapon, &k.Distance, &k.TeamKill)
+		&k.Victim, &k.VictimSquad, &k.VictimSide, &k.VictimKind, &k.VehicleClass, &k.Weapon, &k.Distance, &k.TeamKill, &k.Cause)
 	return k, err
 }
 
 // CountsForLongestKill reports whether a kill qualifies for the longest-kill award: a
-// non-team kill of a soldier (player or AI) by a player with a personal weapon. Vehicle
-// weapons are written by OCAP as "Vehicle: weapon" and do not count, otherwise air defence
-// would win every time. LongestKill applies the same rule in SQL.
+// non-team kill of a soldier (player or AI) by a player with a personal weapon, as recorded
+// (a credited kill's distance is that of the damage, not of the death). Vehicle weapons are
+// written by OCAP as "Vehicle: weapon" and do not count, otherwise air defence would win
+// every time. LongestKill applies the same rule in SQL.
 func CountsForLongestKill(k stats.KillRow) bool {
-	return k.KillerIsPlayer && !k.TeamKill && k.VictimKind != stats.VictimVehicle &&
+	return k.KillerIsPlayer && !k.TeamKill && k.VictimKind != stats.VictimVehicle && k.Cause == "" &&
 		k.Weapon != "" && !strings.Contains(k.Weapon, ": ")
 }
 
@@ -689,7 +693,7 @@ func (s *Store) LongestKill(ctx context.Context, f Filter) (*Kill, error) {
 	where, args := f.where("m")
 	k, err := scanKill(s.db.QueryRowContext(ctx, `SELECT `+killCols+`
 		FROM kills k JOIN missions m ON m.id = k.mission_id
-		WHERE `+where+` AND k.killer_is_player = 1 AND k.team_kill = 0 AND k.victim_kind <> 'vehicle'
+		WHERE `+where+` AND k.killer_is_player = 1 AND k.team_kill = 0 AND k.victim_kind <> 'vehicle' AND k.cause = ''
 		  AND k.weapon <> '' AND k.weapon NOT LIKE '%: %'
 		ORDER BY k.distance DESC, m.date, k.frame LIMIT 1`, args...))
 	if errors.Is(err, sql.ErrNoRows) {

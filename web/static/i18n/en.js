@@ -360,4 +360,8 @@
   'feed.vehicle': 'vehicle',
   'assist.crew': 'Assist: a kill by the crew of their vehicle',
   'assist.hit': 'Assist: hit the victim shortly before its death',
+  'feed.cause.vehicle': 'with vehicle',
+  'feed.cause.vehicle.title': 'The recording names no killer: the victim died in the vehicle this player destroyed',
+  'feed.cause.lastHit': 'last hit',
+  'feed.cause.lastHit.title': 'The recording names no killer (suicide, drowning, a wreck): the kill goes to the enemy who hit the victim last',
 };

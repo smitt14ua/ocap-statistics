@@ -116,6 +116,7 @@ docs/decisions.md             why things are built the way they are (SQLite, dig
 - `http.ServeMux`: a method-less pattern (`/api/`) conflicts with `GET /` — the static handler is registered on `/` and rejects non-GET itself. Tests build the server with the embedded site, so a conflict panics in `go test`.
 - OCAP lists recordings by tag with `LIKE`; the syncer keeps exact (case-insensitive) matches only.
 - `killed` events come in two layouts (`[f, "killed", victim, [killer, weapon], dist]` and `[f, "killed", source, target, weapon, dist]`); `causedById` 0 is a real entity id.
+- OCAP writes the crew of a destroyed vehicle, drownings and falls as suicides (killer = victim), without a killer or as killed by a wreck (a vehicle entity); `stats.Compute` credits such deaths to the enemy who damaged the victim last (`KillRow.Cause`).
 - A vehicle weapon kill is attributed to the gunner (a unit), not the vehicle; crews come from vehicle positions `[pos, dir, alive, [crew ids], [from, to]]`.
 - Saved admin settings override config/env until reset; tests that change config must account for that.
 - The default sort (`settings.Sort`) may point to a custom column (`custom.<id>`); `SortOrder.normalize` falls back to kills when that column is deleted, and `app.js` `defaultSort` does the same on the client.

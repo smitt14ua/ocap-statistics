@@ -184,24 +184,32 @@ func TestHitAssists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assists := func(a Assists) map[string]int {
+	players := func(a Assists) map[string]PlayerRow {
 		rules, err := NewRules(DefaultNickname(), a)
 		if err != nil {
 			t.Fatal(err)
 		}
-		got := map[string]int{}
+		got := map[string]PlayerRow{}
 		for _, p := range Compute(d, rules).Players {
-			got[p.Name] = p.KillAssists
+			got[p.Name] = p
+		}
+		return got
+	}
+	assists := func(a Assists) map[string]int {
+		got := map[string]int{}
+		for name, p := range players(a) {
+			got[name] = p.KillAssists
 		}
 		return got
 	}
 	// Bravo: the rifleman Alpha killed (two hits, one assist) and the enemy who died without a
-	// killer. Alpha: only that enemy, not his own kill. None for the death at 500 (hits before
-	// the previous death), at 1000 (hit 400 s earlier) or for the friendly AI Alpha hit.
-	if got := assists(DefaultAssists()); got["Alpha"] != 1 || got["Bravo"] != 2 || got["Enemy"] != 0 {
-		t.Errorf("assists = %v, want Alpha 1, Bravo 2, Enemy 0", got)
+	// killer, which goes to Alpha who hit him last. Alpha: no assist for his own kills. None for
+	// the death at 500 (hits before the previous death), at 1000 (hit 400 s earlier) or for the
+	// friendly AI Alpha hit.
+	if got := assists(DefaultAssists()); got["Alpha"] != 0 || got["Bravo"] != 2 || got["Enemy"] != 0 {
+		t.Errorf("assists = %v, want Alpha 0, Bravo 2, Enemy 0", got)
 	}
-	// Each assist is listed with its death; a death without a killer has none.
+	// Each assist is listed with its death.
 	var bravo []AssistRow
 	for _, a := range Compute(d, DefaultRules()).Assists {
 		if a.Player == "Bravo" {
@@ -210,11 +218,12 @@ func TestHitAssists(t *testing.T) {
 	}
 	if len(bravo) != 2 ||
 		bravo[0] != (AssistRow{Frame: 20, Player: "Bravo", Kind: AssistHit, Killer: "Alpha", Victim: "Rifleman", VictimKind: VictimAI}) ||
-		bravo[1] != (AssistRow{Frame: 40, Player: "Bravo", Kind: AssistHit, Victim: "Enemy", VictimKind: VictimPlayer}) {
+		bravo[1] != (AssistRow{Frame: 40, Player: "Bravo", Kind: AssistHit, Killer: "Alpha", Victim: "Enemy", VictimKind: VictimPlayer}) {
 		t.Errorf("Bravo's assists = %+v", bravo)
 	}
-	if got := assists(Assists{Hits: true, Window: 500}); got["Bravo"] != 3 {
-		t.Errorf("assists with a 500 s window = %v, want Bravo 3", got)
+	// With a 500 s window Bravo's hit at 600 reaches the grenade suicide at 1000: his kill.
+	if got := players(Assists{Hits: true, Window: 500}); got["Bravo"].KillAssists != 2 || got["Bravo"].Kills != 1 {
+		t.Errorf("Bravo with a 500 s window = %+v, want 1 kill, 2 assists", got["Bravo"])
 	}
 	if got := assists(Assists{Window: 300}); got["Alpha"] != 0 || got["Bravo"] != 0 {
 		t.Errorf("assists with hits off = %v, want none", got)
@@ -244,6 +253,69 @@ func TestAssistWithoutPlayerKill(t *testing.T) {
 	want := AssistRow{Frame: 12, Player: "Alpha", Kind: AssistHit, Killer: "Friend", Victim: "Rifleman", VictimKind: VictimAI}
 	if len(res.Kills) != 0 || len(res.Assists) != 1 || res.Assists[0] != want || res.CaptureDelay != 0.5 {
 		t.Errorf("kills = %+v, assists = %+v, delay = %v", res.Kills, res.Assists, res.CaptureDelay)
+	}
+}
+
+// OCAP writes the crew of a destroyed vehicle, drownings and the like as suicides or as
+// killed by a wreck; such deaths go to the enemy who damaged the victim last.
+func TestCreditedKills(t *testing.T) {
+	d, err := digest.Parse(strings.NewReader(`{"captureDelay": 1, "entities": [
+		{"id": 0, "name": "Gunner", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 1, "name": "Driver", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 2, "name": "Tank", "side": "WEST", "type": "vehicle", "class": "tank",
+		 "positions": [[[0, 0], 0, 1, [0, 1], [0, 100]]]},
+		{"id": 3, "name": "Crew1", "side": "EAST", "isPlayer": 1, "type": "unit"},
+		{"id": 4, "name": "Crew2", "side": "EAST", "isPlayer": 1, "type": "unit"},
+		{"id": 5, "name": "BTR", "side": "EAST", "type": "vehicle", "class": "apc",
+		 "positions": [[[0, 0], 0, 1, [3, 4], [0, 100]]]},
+		{"id": 6, "name": "Swimmer", "side": "EAST", "isPlayer": 1, "type": "unit"},
+		{"id": 7, "name": "Rifle", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 8, "name": "Bravo", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 9, "name": "Lonely", "side": "EAST", "isPlayer": 1, "type": "unit"},
+		{"id": 10, "name": "Mate", "side": "WEST", "isPlayer": 1, "type": "unit"}
+	], "events": [
+		[10, "killed", 5, [0, "Tank: Cannon"], 800],
+		[11, "killed", 3, [3, "BTR: KPVT"], 0],
+		[11, "killed", 4, ["null", ""], 0],
+		[20, "hit", 6, [8, "M4"], 50], [30, "hit", 6, [7, "M4"], 50],
+		[60, "killed", 6, [5, ""], 40],
+		[200, "killed", 9, [9, "Grenade"], 0],
+		[300, "hit", 10, [7, "M4"], 50],
+		[310, "killed", 10, [10, ""], 0]
+	]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := Compute(d, DefaultRules())
+	got := map[string]PlayerRow{}
+	for _, p := range res.Players {
+		got[p.Name] = p
+	}
+	// The crew of the BTR goes to its destroyer, with an assist for his driver; the swimmer the
+	// BTR wreck "killed" to Rifle, who hit him last, with an assist for Bravo's earlier hit.
+	for name, want := range map[string][3]int{ // kills, assists, vehicles
+		"Gunner": {2, 0, 1}, "Driver": {0, 2, 0}, "Rifle": {1, 0, 0}, "Bravo": {0, 1, 0},
+	} {
+		if p := got[name]; p.Kills != want[0] || p.KillAssists != want[1] || p.VehicleKills != want[2] {
+			t.Errorf("%s = %+v, want kills %d, assists %d, vehicles %d", name, p, want[0], want[1], want[2])
+		}
+	}
+	// A suicide without enemy damage stays one; damage by a team mate does not count.
+	if got["Rifle"].TeamKills != 0 || got["Lonely"].Deaths != 1 || got["Mate"].Deaths != 1 {
+		t.Errorf("Rifle %+v, Lonely %+v, Mate %+v", got["Rifle"], got["Lonely"], got["Mate"])
+	}
+	causes := map[string]KillRow{}
+	for _, k := range res.Kills {
+		causes[k.Victim] = k
+	}
+	if k := causes["Crew1"]; k.Killer != "Gunner" || k.Cause != CauseVehicle || k.Weapon != "Tank: Cannon" || k.Distance != 800 {
+		t.Errorf("Crew1 kill = %+v", k)
+	}
+	if k := causes["Swimmer"]; k.Killer != "Rifle" || k.Cause != CauseLastHit || k.Weapon != "" {
+		t.Errorf("Swimmer kill = %+v", k)
+	}
+	if k := causes["Lonely"]; k.Killer != "Lonely" || k.Cause != "" || causes["Mate"].Killer != "Mate" {
+		t.Errorf("suicides = %+v, %+v", k, causes["Mate"])
 	}
 }
 

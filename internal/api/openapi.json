@@ -1386,6 +1386,14 @@
           },
           "teamKill": {
             "type": "boolean"
+          },
+          "cause": {
+            "type": "string",
+            "enum": [
+              "vehicle",
+              "lastHit"
+            ],
+            "description": "Set when the recording names no killer (suicide, no killer, a wreck) and the kill was credited to the enemy who last damaged the victim: vehicle when the victim died in the vehicle the killer destroyed, lastHit when the killer hit it last. Weapon and distance are those of that damage (empty for a hit)."
           }
         }
       },

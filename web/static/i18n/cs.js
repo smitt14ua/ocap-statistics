@@ -359,4 +359,8 @@
   'feed.vehicle': 'vozidlo',
   'assist.crew': 'Asistence: zabití posádkou jeho vozidla',
   'assist.hit': 'Asistence: zasáhl oběť krátce před její smrtí',
+  'feed.cause.vehicle': 's vozidlem',
+  'feed.cause.vehicle.title': 'Záznam neuvádí zabijáka: oběť zahynula ve vozidle, které tento hráč zničil',
+  'feed.cause.lastHit': 'poslední zásah',
+  'feed.cause.lastHit.title': 'Záznam neuvádí zabijáka (sebevražda, utonutí, vrak): zabití se připíše nepříteli, který oběť zasáhl naposledy',
 };

@@ -855,7 +855,9 @@ class StatsApp {
       const suicide = e.killer === e.victim && !e.killerIsPlayer && e.victimKind === 'player';
       return el('tr', {},
         el('td', { class: 'time' }, fmtClock(e.frame * delay)),
-        el('td', {}, suicide ? el('span', { class: 'who none' }, '—') : who(e.killer, e.killerSquad, e.killerSide, e.killerIsPlayer ? 'player' : 'ai', e.killer === me && e.killerIsPlayer)),
+        el('td', {}, suicide ? el('span', { class: 'who none' }, '—') : who(e.killer, e.killerSquad, e.killerSide, e.killerIsPlayer ? 'player' : 'ai', e.killer === me && e.killerIsPlayer),
+          // The recording named no killer; the kill was credited for the last damage.
+          e.cause ? el('span', { class: 'badge', title: t(`feed.cause.${e.cause}.title`) }, t(`feed.cause.${e.cause}`)) : null),
         el('td', {}, who(e.victim, e.victimSquad, e.victimSide, e.victimKind, e.victim === me && e.victimKind === 'player'),
           e.teamKill ? el('span', { class: 'badge bad', title: t('col.teamKills.title') }, t('col.teamKills')) : null,
           suicide ? el('span', { class: 'badge' }, t('feed.suicide')) : null,
