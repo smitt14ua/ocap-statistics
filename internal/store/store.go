@@ -471,11 +471,14 @@ type Counts struct {
 	Pending int `json:"pending"`
 	Error   int `json:"error"`
 	Missing int `json:"missing"`
+	// LastFetched is when the newest processed recording was stored: the time the statistics
+	// last received new data, unlike the end of a sync that found nothing new.
+	LastFetched time.Time `json:"lastFetched,omitzero"`
 }
 
 func (s *Store) Counts(ctx context.Context) (Counts, error) {
 	var c Counts
-	rows, err := s.db.QueryContext(ctx, `SELECT status, COUNT(*) FROM missions GROUP BY status`)
+	rows, err := s.db.QueryContext(ctx, `SELECT status, COUNT(*), MAX(fetched_at) FROM missions GROUP BY status`)
 	if err != nil {
 		return c, err
 	}
@@ -483,13 +486,17 @@ func (s *Store) Counts(ctx context.Context) (Counts, error) {
 	for rows.Next() {
 		var st string
 		var n int
-		if err := rows.Scan(&st, &n); err != nil {
+		var fetched int64
+		if err := rows.Scan(&st, &n, &fetched); err != nil {
 			return c, err
 		}
 		c.Total += n
 		switch st {
 		case StatusDone:
 			c.Done = n
+			if fetched > 0 {
+				c.LastFetched = time.Unix(fetched, 0).UTC()
+			}
 		case StatusPending:
 			c.Pending = n
 		case StatusError:

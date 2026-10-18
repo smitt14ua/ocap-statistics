@@ -256,12 +256,16 @@ class StatsApp {
     if (this.data) {
       const tot = this.data.totals;
       parts.push(t('status.missions', { n: tot.missions }), t('status.players', { n: tot.players }),
-        t('status.squads', { n: tot.squads }), t('status.time', { t: fmtElapsed(this.loadTime) }));
+        t('status.squads', { n: tot.squads }));
+      // Technical detail: shown in the footer, not among the figures in the header.
+      $('loadTime').textContent = t('status.time', { t: fmtElapsed(this.loadTime) });
+      $('loadTime').hidden = false;
     }
     let st = null;
     try {
       st = await apiGet('status');
-      parts.push(t('status.updated', { when: window.i18n.relTime(st.sync.lastSuccess) }));
+      // When new data arrived, not when the last sync that may have found nothing finished.
+      if (st.missions.lastFetched) parts.push(t('status.updated', { when: window.i18n.relTime(st.missions.lastFetched) }));
       if (st.missions.pending > 0) parts.push(t('status.queue', { n: st.missions.pending }));
       if (st.sync.lastError) parts.push(t('status.syncError', { e: st.sync.lastError }));
     } catch { /* status is optional */ }

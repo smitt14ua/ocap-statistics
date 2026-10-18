@@ -898,6 +898,11 @@
           "missing": {
             "type": "integer",
             "description": "Recordings whose data file OCAP no longer has"
+          },
+          "lastFetched": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the newest processed recording was stored (the last time new data arrived)"
           }
         }
       },

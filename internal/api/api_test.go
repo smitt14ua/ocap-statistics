@@ -132,8 +132,9 @@ func runSync(t *testing.T, sy *syncer.Syncer) {
 func TestSyncAndAPI(t *testing.T) {
 	fake, sy, h := setup(t)
 	runSync(t, sy)
-	if st := sy.Status(); st.LastError != "" || st.LastProcessed != 2 {
-		t.Fatalf("sync status: %+v", st)
+	synced := sy.Status()
+	if synced.LastError != "" || synced.LastProcessed != 2 {
+		t.Fatalf("sync status: %+v", synced)
 	}
 	if n := fake.downloads.Load(); n != 2 {
 		t.Fatalf("downloads = %d, want 2 (other tags must be skipped)", n)
@@ -143,6 +144,15 @@ func TestSyncAndAPI(t *testing.T) {
 	runSync(t, sy)
 	if n := fake.downloads.Load(); n != 2 {
 		t.Fatalf("downloads after resync = %d, want 2", n)
+	}
+
+	// "Updated" on the page is the time new data arrived, not the end of the last sync.
+	var status struct {
+		Missions struct{ LastFetched time.Time }
+	}
+	get(t, h, "/api/v1/status", &status)
+	if lf := status.Missions.LastFetched; lf.IsZero() || lf.After(synced.LastFinish) {
+		t.Errorf("lastFetched = %v, want set and not after the first sync (%v)", lf, synced.LastFinish)
 	}
 
 	var stats struct {

@@ -103,6 +103,7 @@
 
     footer.powered { text-align: center; font-size: 11px; color: var(--dim); padding: 8px 0; }
     footer.powered a { color: var(--dim); }
+    #loadTime::before { content: ' · '; }
   </style>
   <script src="i18n/en.js"></script>
   <script src="i18n/be.js"></script>
@@ -209,7 +210,7 @@
       </section>
     </main>
 
-    <footer class="powered"><a href="https://github.com/smitt14ua/ocap-statistics" target="_blank" rel="noopener" data-i18n="footer.powered">Powered by OCAP Statistics</a></footer>
+    <footer class="powered"><a href="https://github.com/smitt14ua/ocap-statistics" target="_blank" rel="noopener" data-i18n="footer.powered">Powered by OCAP Statistics</a><span id="loadTime" hidden></span></footer>
   </div>
 
   <div class="modal" id="rotationModal" role="dialog" aria-modal="true" aria-labelledby="rotationTitle">
