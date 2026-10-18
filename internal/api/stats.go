@@ -324,6 +324,10 @@ func (s *Server) mission(r *http.Request) (response, error) {
 	if err != nil {
 		return response{}, err
 	}
+	assists, err := s.store.Assists(ctx, id)
+	if err != nil {
+		return response{}, err
+	}
 	type missionPlayer struct {
 		Name              string `json:"name"`
 		Squad             string `json:"squad"`
@@ -347,7 +351,7 @@ func (s *Server) mission(r *http.Request) (response, error) {
 	}
 	return jsonResponse(map[string]any{
 		"mission": m, "counted": m.Duration >= s.settings.Get().MinDuration,
-		"players": players, "squads": nonNil(res.Squads), "kills": nonNil(kills),
+		"players": players, "squads": nonNil(res.Squads), "kills": nonNil(kills), "assists": nonNil(assists),
 	})
 }
 

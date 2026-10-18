@@ -31,6 +31,17 @@ const fmtElapsed = (ms) => {
   return fmtDuration(ms / 1000);
 };
 const isoDate =(d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+// fmtClock formats a time in the mission: 5:09 or 1:05:09.
+const fmtClock = (sec) => {
+  sec = Math.max(0, Math.floor(sec));
+  const pad = (n) => String(n).padStart(2, '0');
+  const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = sec % 60;
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+};
+
+// The usual Arma colours of the sides. They only fill a dot next to the side name.
+const SIDE_COLORS = { WEST: '#3b82f6', EAST: '#ef4444', GUER: '#22c55e', CIV: '#a855f7' };
+const sideDot = (side) => el('span', { class: 'swatch', style: `background:${SIDE_COLORS[side] || '#888'}`, 'aria-hidden': 'true' });
 
 // html2canvas is only needed for screenshots, so it is loaded on demand and pinned by
 // Subresource Integrity.
@@ -91,6 +102,9 @@ class StatsApp {
     this.table = $('statsTable');
 
     this.lastFocus = null;
+    // The view shown in the detail modal and the views it was opened from (for Back).
+    this.detailView = null;
+    this.detailStack = [];
   }
 
   async init() {
@@ -114,7 +128,9 @@ class StatsApp {
       this.applyPeriod(params.get('period') || this.defaultPeriod());
     }
     this.setView(params.get('view') === 'squads' ? 'squads' : 'players', false);
+    const mission = params.get('mission');
     await this.load();
+    if (/^\d+$/.test(mission || '')) this.openMission(mission);
   }
 
   bind() {
@@ -142,6 +158,8 @@ class StatsApp {
     $('copyTop10').addEventListener('click', () => this.copyTop10());
     $('copyRotation').addEventListener('click', () => this.copyRotation());
     $('showRotation').addEventListener('click', () => this.openRotation());
+    $('showMissions').addEventListener('click', () => this.openMissions());
+    $('detailBack').addEventListener('click', () => this.backDetail());
 
     document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', (e) => {
       if (e.target === m || e.target.closest('[data-close]')) this.closeModal(m);
@@ -213,6 +231,8 @@ class StatsApp {
       url.searchParams.set('period', period);
     }
     if (this.viewMode === 'squads') url.searchParams.set('view', 'squads');
+    // An open mission is part of the address, so the link can be shared.
+    if (this.detailView && this.detailView.missionId) url.searchParams.set('mission', this.detailView.missionId);
     history.replaceState(null, '', url);
   }
 
@@ -510,15 +530,18 @@ class StatsApp {
   closeModal(m) {
     m.classList.remove('open');
     document.querySelector('.page').inert = false;
+    if (m.id === 'detailModal') {
+      this.detailView = null;
+      this.detailStack = [];
+      this.updateURL();
+    }
     if (this.lastFocus && document.contains(this.lastFocus)) this.lastFocus.focus();
   }
 
-  replayLink(id, filename, text) {
-    if (!this.cfg.ocapUrl || !filename) return text;
-    return el('a', {
-      href: `${this.cfg.ocapUrl}/recording/${encodeURIComponent(id)}/${encodeURIComponent(filename)}`,
-      target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation(),
-    }, text);
+  // replayURL is the recording in the OCAP player, or '' when no OCAP address is configured.
+  replayURL(id, filename) {
+    if (!this.cfg.ocapUrl || !filename) return '';
+    return `${this.cfg.ocapUrl}/recording/${encodeURIComponent(id)}/${encodeURIComponent(filename)}`;
   }
 
   tiles(items) {
@@ -544,17 +567,42 @@ class StatsApp {
       el('tbody', {}, rows)));
   }
 
-  async showDetail(title, loader) {
+  // showDetail shows a view in the detail modal. A view opened from another one (missions →
+  // mission → player …) keeps that one on a stack, and Back returns to it. The loader gets the
+  // view object, where it may keep state (the open tab) and update the title.
+  showDetail(title, loader, missionId = null) {
+    const open = $('detailModal').classList.contains('open') && this.detailView;
+    this.detailStack = open ? [...this.detailStack, this.detailView] : [];
+    this.detailView = { title, loader, missionId };
+    this.renderDetail();
+  }
+
+  backDetail() {
+    if (!this.detailStack.length) return;
+    this.detailView = this.detailStack.pop();
+    this.renderDetail();
+  }
+
+  async renderDetail() {
     const m = $('detailModal');
-    $('detailTitle').textContent = title;
+    const view = this.detailView;
+    $('detailTitle').textContent = view.title;
+    $('detailBack').hidden = !this.detailStack.length;
     $('detailBody').replaceChildren(el('p', { class: 'muted' }, t('detail.loading')));
     this.openModal(m);
+    this.updateURL();
     m.querySelector('.modal-box').scrollTop = 0;
+    let body;
     try {
-      $('detailBody').replaceChildren(...await loader());
+      body = await view.loader(view);
     } catch (e) {
-      $('detailBody').replaceChildren(el('p', { class: 'bad' }, t('detail.error', { e: e.message })));
+      body = [el('p', { class: 'bad' }, t('detail.error', { e: e.message }))];
     }
+    // Another view may have been opened while this one was loading.
+    if (this.detailView !== view) return;
+    $('detailTitle').textContent = view.title;
+    // Loaders may return nested arrays and null for parts they leave out.
+    $('detailBody').replaceChildren(...body.flat().filter(n => n !== null && n !== undefined && n !== false));
   }
 
   openPlayer(name) {
@@ -576,7 +624,7 @@ class StatsApp {
           this.list('list.squads', d.squads, (n) => this.openSquad(n))),
         this.dataTable(['col.date', 'col.mission', 'col.map', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists'],
           d.missions.map(m => el('tr', {},
-            el('td', {}, m.date), el('td', {}, this.replayLink(m.missionId, m.filename, m.name)), el('td', {}, m.world),
+            el('td', {}, m.date), el('td', {}, el('button', { type: 'button', class: 'link', onclick: () => this.openMission(m.missionId, m.name) }, m.name)), el('td', {}, m.world),
             el('td', {}, m.squadRaw || '-'), el('td', {}, m.side),
             el('td', {}, m.kills), el('td', {}, m.deaths), el('td', {}, m.teamKills), el('td', {}, m.vehiclesDestroyed), el('td', {}, m.killAssists)))),
       ];
@@ -606,6 +654,195 @@ class StatsApp {
           })),
       ];
     });
+  }
+
+  // --- missions ----------------------------------------------------------------------
+
+  openMissions() {
+    this.showDetail(t('missions.title'), async () => {
+      const d = await apiGet(`missions?${this.query()}`);
+      return [
+        el('p', { class: 'subtitle' }, `${this.periodText()} · ${t('status.missions', { n: d.total })}`),
+        d.missions.length ? this.dataTable(['col.date', 'col.mission', 'col.map', 'col.duration', 'col.players', 'col.winner', 'col.replay'],
+          d.missions.map(m => {
+            const open = () => this.openMission(m.id, m.name);
+            const replay = this.replayURL(m.id, m.filename);
+            const tr = el('tr', { class: 'clickable' },
+              el('td', {}, m.date),
+              el('td', {}, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, m.name)),
+              el('td', {}, m.world), el('td', {}, fmtDuration(m.duration)), el('td', {}, m.playerCount),
+              el('td', { title: m.endMessage || null }, m.endSide ? [sideDot(m.endSide), m.endSide] : el('span', { class: 'muted' }, '—')),
+              el('td', {}, replay ? el('a', { href: replay, target: '_blank', rel: 'noopener', 'aria-label': t('mission.openReplay'), title: t('mission.openReplay'), onclick: (e) => e.stopPropagation() }, '▶') : '—'));
+            tr.addEventListener('click', open);
+            return tr;
+          })) : el('p', { class: 'muted' }, t('n.noMissions')),
+      ];
+    });
+  }
+
+  openMission(id, name) {
+    this.showDetail(name || '…', async (view) => {
+      const d = await apiGet(`missions/${encodeURIComponent(id)}`);
+      view.title = d.mission.name;
+      return this.missionBody(d, view);
+    }, String(id));
+  }
+
+  missionBody(d, view) {
+    const m = d.mission;
+    const players = [...d.players].sort((a, b) => b.kills - a.kills || b.killAssists - a.killAssists || a.name.localeCompare(b.name));
+    const sum = (field) => players.reduce((s, p) => s + p[field], 0);
+    const replay = this.replayURL(m.id, m.filename);
+    const feed = this.missionFeed(d, view);
+    const tabs = this.missionTabs(view, {
+      players: this.dataTable(['col.name', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'tile.shots', 'col.hits', 'col.accuracy'],
+        players.map(p => {
+          // A player opens the kill feed filtered to what they did and what happened to them.
+          const open = () => { feed.select(p.name); tabs.show('feed'); };
+          const tr = el('tr', { class: 'clickable' },
+            el('td', {}, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, p.name)),
+            el('td', {}, p.squadRaw || '-'), el('td', {}, sideDot(p.side), p.side),
+            el('td', {}, p.kills), el('td', {}, p.deaths), el('td', {}, p.teamKills), el('td', {}, p.vehiclesDestroyed), el('td', {}, p.killAssists),
+            el('td', {}, p.shotsFired), el('td', {}, p.hits), el('td', {}, p.shotsFired ? fmt(Math.min(100, p.hits / p.shotsFired * 100)) : fmt(0)));
+          tr.addEventListener('click', open);
+          return tr;
+        })),
+      squads: this.dataTable(['col.squad', 'col.players', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.accuracy', 'col.kd'],
+        [...d.squads].sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name)).map(s => el('tr', {},
+          el('td', {}, s.name || t('noSquad')), el('td', {}, s.players), el('td', {}, s.kills), el('td', {}, s.deaths), el('td', {}, s.teamKills),
+          el('td', {}, s.vehiclesDestroyed), el('td', {}, s.killAssists), el('td', {}, fmt(s.accuracy)), el('td', {}, fmt(s.kd))))),
+      feed: feed.node,
+    });
+    return [
+      el('p', { class: 'subtitle' }, [m.date, m.world, fmtDuration(m.duration), m.tag, m.author && t('mission.author', { a: m.author })].filter(Boolean).join(' · ')),
+      el('div', { class: 'mission-head' },
+        el('div', { class: 'result' }, m.endSide
+          ? [el('span', {}, sideDot(m.endSide), el('b', {}, t('mission.winner', { side: m.endSide }))), m.endMessage ? el('span', { class: 'muted' }, m.endMessage) : null]
+          : el('span', { class: 'muted' }, t('mission.noWinner'))),
+        replay ? el('a', { class: 'btn primary', href: replay, target: '_blank', rel: 'noopener' }, el('span', { 'aria-hidden': 'true' }, '▶'), t('mission.openReplay')) : null),
+      d.counted ? null : el('p', { class: 'note warn' }, t('mission.notCounted')),
+      this.tiles([['col.players', players.length], ['col.kills', sum('kills')], ['col.deaths', sum('deaths')], ['col.teamKills.title', sum('teamKills')],
+        ['col.vehicles.title', sum('vehiclesDestroyed')], ['tile.assists', sum('killAssists')]]),
+      this.sideCards(players, m.endSide),
+      tabs.node,
+    ];
+  }
+
+  // sideCards sums the players of each side.
+  sideCards(players, winner) {
+    const sides = new Map();
+    for (const p of players) {
+      const s = sides.get(p.side) || { side: p.side, players: 0, kills: 0, deaths: 0, teamKills: 0, vehiclesDestroyed: 0, killAssists: 0 };
+      s.players++;
+      for (const f of ['kills', 'deaths', 'teamKills', 'vehiclesDestroyed', 'killAssists']) s[f] += p[f];
+      sides.set(p.side, s);
+    }
+    return el('div', { class: 'side-cards' }, [...sides.values()].sort((a, b) => b.players - a.players).map(s =>
+      el('div', { class: 'side-card', style: `border-top-color:${SIDE_COLORS[s.side] || '#888'}` },
+        el('h4', {}, sideDot(s.side), s.side || '—', s.side && s.side === winner ? el('span', { class: 'badge ok' }, t('mission.won')) : null),
+        el('dl', {}, [['col.players', s.players], ['col.k', s.kills, 'col.kills'], ['col.d', s.deaths, 'col.deaths'],
+          ['col.teamKills', s.teamKills, 'col.teamKills.title'], ['col.vehicles', s.vehiclesDestroyed, 'col.vehicles.title'], ['col.assists', s.killAssists, 'tile.assists']]
+          .map(([label, value, title]) => el('div', {}, el('dt', { title: title ? t(title) : null }, t(label)), el('dd', {}, value)))))));
+  }
+
+  // missionTabs builds WAI-ARIA tabs over the panels; view remembers the open tab for Back.
+  missionTabs(view, panels) {
+    const names = Object.keys(panels);
+    const tabs = names.map(name => el('button', { type: 'button', role: 'tab', id: `mtab-${name}`, 'aria-controls': `mpanel-${name}` }, t(`mission.tab.${name}`)));
+    const sections = names.map(name => el('div', { class: 'tab', role: 'tabpanel', id: `mpanel-${name}`, 'aria-labelledby': `mtab-${name}` }, panels[name]));
+    const show = (name, focus = false) => {
+      view.tab = name;
+      names.forEach((n, i) => {
+        const on = n === name;
+        tabs[i].classList.toggle('active', on);
+        tabs[i].setAttribute('aria-selected', String(on));
+        tabs[i].tabIndex = on ? 0 : -1;
+        sections[i].classList.toggle('active', on);
+        if (on && focus) tabs[i].focus();
+      });
+    };
+    tabs.forEach((b, i) => {
+      b.addEventListener('click', () => show(names[i]));
+      b.addEventListener('keydown', (e) => {
+        const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: names.length - 1 }[e.key];
+        if (next === undefined) return;
+        e.preventDefault();
+        show(names[(next + names.length) % names.length], true);
+      });
+    });
+    show(names.includes(view.tab) ? view.tab : names[0]);
+    return { node: [el('div', { class: 'tabs', role: 'tablist', 'aria-label': t('mission.tabs') }, tabs), ...sections], show };
+  }
+
+  // missionFeed lists the deaths of the mission in order, with the players who got an assist
+  // for each, and can be narrowed to one player.
+  missionFeed(d, view) {
+    const delay = d.mission.captureDelay || 1;
+    // Assists belong to the death with the same frame and victim. Deaths of AI killed by AI are
+    // not kills of the statistics, so their assists make rows of their own.
+    const events = d.kills.map(k => ({ ...k, assists: [] }));
+    const byDeath = new Map();
+    for (const e of events) if (!byDeath.has(`${e.frame}|${e.victim}`)) byDeath.set(`${e.frame}|${e.victim}`, e);
+    for (const a of d.assists) {
+      const key = `${a.frame}|${a.victim}`;
+      if (!byDeath.has(key)) {
+        const e = { frame: a.frame, killer: a.killer, victim: a.victim, victimSquad: a.victimSquad, victimKind: a.victimKind, assists: [] };
+        byDeath.set(key, e);
+        events.push(e);
+      }
+      byDeath.get(key).assists.push(a);
+    }
+    events.sort((a, b) => a.frame - b.frame);
+
+    const involves = (e, name) => (e.killer === name && e.killerIsPlayer) || (e.victim === name && e.victimKind === 'player') ||
+      e.assists.some(a => a.player === name);
+    const who = (name, squad, side, kind, me) => {
+      if (!name) return el('span', { class: 'who none' }, t('feed.unknown'));
+      return el('span', { class: `who${kind === 'player' ? '' : ' ai'}${me ? ' me' : ''}` },
+        side ? sideDot(side) : null, name, squad ? el('span', { class: 'squad' }, ` [${squad}]`) : null);
+    };
+    const row = (e, me) => {
+      const suicide = e.killer === e.victim && !e.killerIsPlayer && e.victimKind === 'player';
+      return el('tr', {},
+        el('td', { class: 'time' }, fmtClock(e.frame * delay)),
+        el('td', {}, suicide ? el('span', { class: 'who none' }, '—') : who(e.killer, e.killerSquad, e.killerSide, e.killerIsPlayer ? 'player' : 'ai', e.killer === me && e.killerIsPlayer)),
+        el('td', {}, who(e.victim, e.victimSquad, e.victimSide, e.victimKind, e.victim === me && e.victimKind === 'player'),
+          e.teamKill ? el('span', { class: 'badge bad', title: t('col.teamKills.title') }, t('col.teamKills')) : null,
+          suicide ? el('span', { class: 'badge' }, t('feed.suicide')) : null,
+          e.victimKind === 'ai' ? el('span', { class: 'badge' }, t('feed.ai')) : null,
+          e.victimKind === 'vehicle' ? el('span', { class: 'badge' }, e.vehicleClass || t('feed.vehicle')) : null),
+        el('td', {}, e.weapon || '—'),
+        el('td', { class: 'num' }, e.distance ? Math.round(e.distance) : '—'),
+        el('td', { class: 'assists' }, e.assists.length ? e.assists.flatMap((a, i) => [i ? ', ' : null,
+          el('span', { class: `who${a.player === me ? ' me' : ''}`, title: t(`assist.${a.kind}`) }, a.player)]) : '—'));
+    };
+
+    const select = el('select', { id: 'feedPlayer' },
+      el('option', { value: '' }, t('feed.allPlayers')),
+      [...d.players].sort((a, b) => a.name.localeCompare(b.name)).map(p => el('option', { value: p.name }, p.name)));
+    const summary = el('span', { class: 'summary', 'aria-live': 'polite' });
+    const body = el('tbody');
+    const render = () => {
+      const me = select.value;
+      view.player = me;
+      const list = me ? events.filter(e => involves(e, me)) : events;
+      const p = me && d.players.find(x => x.name === me);
+      summary.textContent = p ? t('feed.summary', { k: p.kills, d: p.deaths, a: p.killAssists, v: p.vehiclesDestroyed }) : '';
+      body.replaceChildren(...(list.length ? list.map(e => row(e, me))
+        : [el('tr', {}, el('td', { colspan: 6, class: 'muted' }, t('list.empty')))]));
+    };
+    select.addEventListener('change', render);
+    select.value = view.player || '';
+    render();
+    return {
+      node: [
+        el('div', { class: 'feed-filter' }, el('label', { for: 'feedPlayer' }, t('col.player')), select, summary),
+        el('div', { class: 'table-wrap', tabindex: 0 }, el('table', { class: 'feed' },
+          el('thead', {}, el('tr', {}, ['col.time', 'col.killer', 'col.victim', 'col.weapon', 'col.distance', 'col.assistedBy'].map(h => el('th', {}, t(h))))),
+          body)),
+      ],
+      select: (name) => { select.value = name; render(); },
+    };
   }
 
   openRotation() {

@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS missions (
 	end_side        TEXT    NOT NULL DEFAULT '',
 	end_message     TEXT    NOT NULL DEFAULT '',
 	player_count    INTEGER NOT NULL DEFAULT 0,
-	fetched_at      INTEGER NOT NULL DEFAULT 0
+	fetched_at      INTEGER NOT NULL DEFAULT 0,
+	capture_delay   REAL    NOT NULL DEFAULT 1 -- seconds per frame
 );
 CREATE INDEX IF NOT EXISTS idx_missions_date ON missions(date);
 CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status);
@@ -90,6 +91,19 @@ CREATE TABLE IF NOT EXISTS kills (
 CREATE INDEX IF NOT EXISTS idx_kills_mission ON kills(mission_id);
 CREATE INDEX IF NOT EXISTS idx_kills_killer ON kills(killer);
 CREATE INDEX IF NOT EXISTS idx_kills_victim ON kills(victim);
+
+CREATE TABLE IF NOT EXISTS assists (
+	mission_id   INTEGER NOT NULL REFERENCES missions(id) ON DELETE CASCADE,
+	frame        INTEGER NOT NULL,
+	player       TEXT    NOT NULL,
+	player_squad TEXT    NOT NULL,
+	kind         TEXT    NOT NULL,
+	killer       TEXT    NOT NULL,
+	victim       TEXT    NOT NULL,
+	victim_squad TEXT    NOT NULL,
+	victim_kind  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_assists_mission ON assists(mission_id);
 
 CREATE TABLE IF NOT EXISTS users (
 	username      TEXT PRIMARY KEY COLLATE NOCASE,
@@ -147,24 +161,20 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // migrate brings databases created by older versions up to the current schema.
 func migrate(db *sql.DB) error {
-	cols := map[string]bool{}
-	rows, err := db.Query(`SELECT name FROM pragma_table_info('mission_players')`)
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			rows.Close()
+	for _, c := range []struct{ table, column, def string }{
+		// Older statistics have no assists; ComputeVersion 2 recomputes them from new digests.
+		{"mission_players", "kill_assists", "INTEGER NOT NULL DEFAULT 0"},
+		// Filled when ComputeVersion 4 recomputes the missions from their digests.
+		{"missions", "capture_delay", "REAL NOT NULL DEFAULT 1"},
+	} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&n); err != nil {
 			return err
 		}
-		cols[name] = true
-	}
-	rows.Close()
-	if !cols["kill_assists"] {
-		// Older statistics have no assists; ComputeVersion 2 recomputes them from new digests.
-		if _, err := db.Exec(`ALTER TABLE mission_players ADD COLUMN kill_assists INTEGER NOT NULL DEFAULT 0`); err != nil {
-			return err
+		if n == 0 {
+			if _, err := db.Exec(`ALTER TABLE ` + c.table + ` ADD COLUMN ` + c.column + ` ` + c.def); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -367,6 +377,9 @@ func writeResult(ctx context.Context, tx *sql.Tx, id int64, computeKey string, r
 	if _, err := tx.ExecContext(ctx, `DELETE FROM kills WHERE mission_id = ?`, id); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM assists WHERE mission_id = ?`, id); err != nil {
+		return err
+	}
 	pst, err := tx.PrepareContext(ctx, `INSERT INTO mission_players
 		(mission_id, name, raw_name, squad_raw, squad, side, kills, deaths, team_kills, vehicle_kills, kill_assists, shots, hits)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -394,9 +407,21 @@ func writeResult(ctx context.Context, tx *sql.Tx, id int64, computeKey string, r
 			return err
 		}
 	}
+	ast, err := tx.PrepareContext(ctx, `INSERT INTO assists
+		(mission_id, frame, player, player_squad, kind, killer, victim, victim_squad, victim_kind)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer ast.Close()
+	for _, a := range res.Assists {
+		if _, err := ast.ExecContext(ctx, id, a.Frame, a.Player, a.PlayerSquad, a.Kind, a.Killer, a.Victim, a.VictimSquad, a.VictimKind); err != nil {
+			return err
+		}
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE missions SET status = 'done', attempts = 0, last_error = '', next_attempt_at = 0,
-		compute_key = ?, duration = ?, end_side = ?, end_message = ?, player_count = ? WHERE id = ?`,
-		computeKey, res.Duration, res.EndSide, res.EndMessage, len(res.Players), id)
+		compute_key = ?, duration = ?, capture_delay = ?, end_side = ?, end_message = ?, player_count = ? WHERE id = ?`,
+		computeKey, res.Duration, res.CaptureDelay, res.EndSide, res.EndMessage, len(res.Players), id)
 	return err
 }
 
@@ -541,13 +566,15 @@ type Mission struct {
 	EndSide     string  `json:"endSide"`
 	EndMessage  string  `json:"endMessage"`
 	PlayerCount int     `json:"playerCount"`
+	// CaptureDelay is the length of a recording frame in seconds (frame × delay = mission time).
+	CaptureDelay float64 `json:"captureDelay"`
 }
 
-const missionCols = `m.id, m.filename, m.mission_name, m.world_name, m.date, m.tag, m.author, m.duration, m.end_side, m.end_message, m.player_count`
+const missionCols = `m.id, m.filename, m.mission_name, m.world_name, m.date, m.tag, m.author, m.duration, m.end_side, m.end_message, m.player_count, m.capture_delay`
 
 func scanMission(sc interface{ Scan(...any) error }) (Mission, error) {
 	var m Mission
-	err := sc.Scan(&m.ID, &m.Filename, &m.Name, &m.World, &m.Date, &m.Tag, &m.Author, &m.Duration, &m.EndSide, &m.EndMessage, &m.PlayerCount)
+	err := sc.Scan(&m.ID, &m.Filename, &m.Name, &m.World, &m.Date, &m.Tag, &m.Author, &m.Duration, &m.EndSide, &m.EndMessage, &m.PlayerCount, &m.CaptureDelay)
 	return m, err
 }
 
@@ -698,6 +725,25 @@ func (s *Store) Kills(ctx context.Context, f Filter, q KillQuery) ([]Kill, error
 			return nil, err
 		}
 		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
+// Assists returns the kill assists of one mission in recording order.
+func (s *Store) Assists(ctx context.Context, missionID int64) ([]stats.AssistRow, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT frame, player, player_squad, kind, killer, victim, victim_squad, victim_kind
+		FROM assists WHERE mission_id = ? ORDER BY rowid`, missionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []stats.AssistRow
+	for rows.Next() {
+		var a stats.AssistRow
+		if err := rows.Scan(&a.Frame, &a.Player, &a.PlayerSquad, &a.Kind, &a.Killer, &a.Victim, &a.VictimSquad, &a.VictimKind); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
 	}
 	return out, rows.Err()
 }

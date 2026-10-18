@@ -132,6 +132,13 @@ func TestCompute(t *testing.T) {
 	if rookie.SquadRaw != "milf" || rookie.Squad != "milf" || rookie.Deaths != 1 || rookie.Kills != 0 || rookie.KillAssists != 1 {
 		t.Errorf("Rookie = %+v", rookie)
 	}
+	wantAssist := AssistRow{Frame: 110, Player: "Rookie", PlayerSquad: "milf", Kind: AssistCrew, Killer: "Smith", Victim: "Rifleman", VictimKind: VictimAI}
+	if len(res.Assists) != 1 || res.Assists[0] != wantAssist {
+		t.Errorf("assists = %+v\nwant %+v", res.Assists, wantAssist)
+	}
+	if res.CaptureDelay != 1 {
+		t.Errorf("capture delay = %v", res.CaptureDelay)
+	}
 
 	enemy := got["Enemy"]
 	// Suicide counts as a death but not as a kill; the tank kill by RPG counts as a vehicle.
@@ -194,6 +201,18 @@ func TestHitAssists(t *testing.T) {
 	if got := assists(DefaultAssists()); got["Alpha"] != 1 || got["Bravo"] != 2 || got["Enemy"] != 0 {
 		t.Errorf("assists = %v, want Alpha 1, Bravo 2, Enemy 0", got)
 	}
+	// Each assist is listed with its death; a death without a killer has none.
+	var bravo []AssistRow
+	for _, a := range Compute(d, DefaultRules()).Assists {
+		if a.Player == "Bravo" {
+			bravo = append(bravo, a)
+		}
+	}
+	if len(bravo) != 2 ||
+		bravo[0] != (AssistRow{Frame: 20, Player: "Bravo", Kind: AssistHit, Killer: "Alpha", Victim: "Rifleman", VictimKind: VictimAI}) ||
+		bravo[1] != (AssistRow{Frame: 40, Player: "Bravo", Kind: AssistHit, Victim: "Enemy", VictimKind: VictimPlayer}) {
+		t.Errorf("Bravo's assists = %+v", bravo)
+	}
 	if got := assists(Assists{Hits: true, Window: 500}); got["Bravo"] != 3 {
 		t.Errorf("assists with a 500 s window = %v, want Bravo 3", got)
 	}
@@ -208,6 +227,23 @@ func TestHitAssists(t *testing.T) {
 	off, _ := NewRules(DefaultNickname(), Assists{Window: 300})
 	if off.Key() == DefaultRules().Key() {
 		t.Error("assist settings do not change the rules key")
+	}
+}
+
+// An AI killed by AI is not a kill row, but an assist for it still names both.
+func TestAssistWithoutPlayerKill(t *testing.T) {
+	d, err := digest.Parse(strings.NewReader(`{"captureDelay": 0.5, "entities": [
+		{"id": 0, "name": "Alpha", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 1, "name": "Rifleman", "side": "EAST", "isPlayer": 0, "type": "unit"},
+		{"id": 2, "name": "Friend", "side": "WEST", "isPlayer": 0, "type": "unit"}
+	], "events": [[10, "hit", 1, [0, "M4"], 50], [12, "killed", 1, [2, "M4"], 50]]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := Compute(d, DefaultRules())
+	want := AssistRow{Frame: 12, Player: "Alpha", Kind: AssistHit, Killer: "Friend", Victim: "Rifleman", VictimKind: VictimAI}
+	if len(res.Kills) != 0 || len(res.Assists) != 1 || res.Assists[0] != want || res.CaptureDelay != 0.5 {
+		t.Errorf("kills = %+v, assists = %+v, delay = %v", res.Kills, res.Assists, res.CaptureDelay)
 	}
 }
 

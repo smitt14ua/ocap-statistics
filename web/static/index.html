@@ -101,6 +101,32 @@
     .swatch { display: inline-block; flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; }
     .filter-list .swatch { margin-right: 0; }
 
+    /* Missions */
+    .modal-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .modal-title h2 { overflow-wrap: anywhere; }
+    #detailBack[hidden] { display: none; }
+    .mission-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .mission-head .result { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; min-width: 0; }
+    .mission-head .result b { color: var(--text-strong); }
+    .side-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin: 16px 0; }
+    .side-card { background: var(--bg-input); border: 1px solid var(--border); border-top: 3px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    .side-card h4 { display: flex; align-items: center; gap: 8px; color: var(--text-strong); margin-bottom: 6px; }
+    .side-card h4 .swatch { margin-right: 0; }
+    .side-card dl { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; text-align: center; }
+    .side-card dt { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .side-card dd { font-weight: 700; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+    .feed-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .feed-filter .summary { color: var(--muted); font-size: 13px; }
+    table.feed td { white-space: nowrap; }
+    table.feed td.time, table.feed td.num { font-variant-numeric: tabular-nums; }
+    table.feed td.assists { white-space: normal; min-width: 140px; }
+    .who.ai, .who.none { color: var(--muted); }
+    .who .squad { color: var(--muted); }
+    .who.me { color: var(--accent); font-weight: 700; }
+    .badge.bad { background: var(--danger-dark); color: #fecaca; }
+    .feed .badge, .side-card .badge { margin-left: 6px; font-weight: 600; }
+    td .swatch { width: 8px; height: 8px; margin-right: 6px; }
+
     footer.powered { text-align: center; font-size: 11px; color: var(--dim); padding: 8px 0; }
     footer.powered a { color: var(--dim); }
     #loadTime::before { content: ' · '; }
@@ -147,6 +173,7 @@
         <button type="button" id="exportExcel" data-i18n="btn.excel">Export to Excel</button>
         <button type="button" id="copyTop10" class="hidden" data-i18n="btn.copyTop10">Copy top 10</button>
         <button type="button" id="copyRotation" class="hidden" data-i18n="btn.copyRotation">Copy rotation</button>
+        <button type="button" id="showMissions" data-i18n="btn.missions">Missions</button>
         <button type="button" id="showRotation" class="hidden" data-i18n="btn.rotation">Rotation</button>
         <a class="btn" href="api/docs" target="_blank" rel="noopener" data-i18n="btn.api">API</a>
       </div>
@@ -241,7 +268,10 @@
   <div class="modal" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
     <div class="modal-box">
       <div class="modal-head">
-        <h2 id="detailTitle">&hellip;</h2>
+        <div class="modal-title">
+          <button type="button" id="detailBack" class="small" hidden><span aria-hidden="true">&larr;</span> <span data-i18n="btn.back">Back</span></button>
+          <h2 id="detailTitle">&hellip;</h2>
+        </div>
         <button type="button" class="modal-close" data-close data-i18n-aria="btn.close">&times;</button>
       </div>
       <div id="detailBody"></div>

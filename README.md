@@ -12,7 +12,7 @@ OCAP ──(every 10 min: list of recordings)──► ocap-stats ──► SQLi
 ## Features
 
 - **Automatic ingestion.** New recordings are picked up on a schedule; recordings deleted or re-tagged in OCAP disappear from the statistics. Recordings can be read straight from OCAP's data directory when the service runs on the same host.
-- **Statistics:** kills, deaths, team kills, destroyed vehicles, kill assists (kills by other crew members of your vehicle, deaths of enemies you hit shortly before), accuracy, attendance, K/D, achievements, squad leaderboard, rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), per-mission details.
+- **Statistics:** kills, deaths, team kills, destroyed vehicles, kill assists (kills by other crew members of your vehicle, deaths of enemies you hit shortly before), accuracy, attendance, K/D, achievements, squad leaderboard, rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), a list of missions with a page for each: result, sides, players and squads, a kill feed showing who killed whom and who got the assists, and a link to the replay in OCAP.
 - **Squads from nicknames.** `[ALPHA] John` is player `John` in squad `ALPHA`; recruits (`[~ALPHA~] John`) count in their squad like everyone else. The nickname format, squad aliases and ignored names are configurable.
 - **REST API** with OpenAPI documentation at `/api/docs`, CSV export, ETag caching and CORS.
 - **Web page** with filters, player/squad views, Excel export, top-10 and rotation screenshots to the clipboard and links to the replays in OCAP.
@@ -130,7 +130,7 @@ Common parameters of the statistics endpoints:
 | `GET /api/v1/achievements` | Achievements of a period |
 | `GET /api/v1/rotation` | Rotation score and match log |
 | `GET /api/v1/missions` | Processed missions of a period |
-| `GET /api/v1/missions/{id}` | One mission (OCAP recording id) |
+| `GET /api/v1/missions/{id}` | One mission (OCAP recording id): players, squads, kills and kill assists |
 | `GET /api/v1/status` | Ingestion status |
 | `POST /api/v1/sync` | Queue a sync now (`Authorization: Bearer <adminToken>`) |
 
@@ -189,7 +189,7 @@ cmd/ocap-stats      entry point
 internal/ocap       OCAP client (recordings list, recording download / local read)
 internal/digest     streaming recording parser → compact digest
 internal/stats      per-mission counting rules, nickname parsing
-internal/store      SQLite: missions, digests, per-mission statistics, kills, users
+internal/store      SQLite: missions, digests, per-mission statistics, kills, assists, users
 internal/report     aggregation over a period: players, squads, achievements, rotation
 internal/settings   runtime settings (config defaults + admin overrides)
 internal/syncer     task loop: sync, recompute, resync

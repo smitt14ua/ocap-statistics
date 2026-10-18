@@ -554,7 +554,7 @@
         "tags": [
           "Missions"
         ],
-        "summary": "Statistics of one mission: players, squads and kills",
+        "summary": "Statistics of one mission: players, squads, kills and kill assists",
         "parameters": [
           {
             "name": "id",
@@ -595,8 +595,16 @@
                     },
                     "kills": {
                       "type": "array",
+                      "description": "Kills where the killer or the victim is a player, in recording order",
                       "items": {
                         "$ref": "#/components/schemas/Kill"
+                      }
+                    },
+                    "assists": {
+                      "type": "array",
+                      "description": "Kill assists in recording order; an assist belongs to the death with the same frame and victim",
+                      "items": {
+                        "$ref": "#/components/schemas/Assist"
                       }
                     }
                   }
@@ -1215,6 +1223,51 @@
           },
           "playerCount": {
             "type": "integer"
+          },
+          "captureDelay": {
+            "type": "number",
+            "description": "Seconds per recording frame: an event happened at frame × captureDelay seconds"
+          }
+        }
+      },
+      "Assist": {
+        "type": "object",
+        "description": "A kill assist one player got for one death",
+        "properties": {
+          "frame": {
+            "type": "integer"
+          },
+          "player": {
+            "type": "string",
+            "description": "The player who got the assist"
+          },
+          "playerSquad": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "crew",
+              "hit"
+            ],
+            "description": "crew: a kill by another crew member of the player's vehicle; hit: the player hit the victim shortly before its death"
+          },
+          "killer": {
+            "type": "string",
+            "description": "Empty when the recording has no killer"
+          },
+          "victim": {
+            "type": "string"
+          },
+          "victimSquad": {
+            "type": "string"
+          },
+          "victimKind": {
+            "type": "string",
+            "enum": [
+              "player",
+              "ai"
+            ]
           }
         }
       },

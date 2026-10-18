@@ -18,8 +18,8 @@ import (
 
 // ComputeVersion changes whenever the per-mission rules below change. Stored missions computed
 // with another version or nickname format are recomputed from their digests.
-// Version 3 added kill assists for hits.
-const ComputeVersion = 3
+// Version 3 added kill assists for hits; version 4 records who got each assist.
+const ComputeVersion = 4
 
 // Victim kinds stored with kills.
 const (
@@ -63,12 +63,33 @@ type KillRow struct {
 	TeamKill       bool    `json:"teamKill"`
 }
 
+// Assist kinds stored with assists.
+const (
+	AssistCrew = "crew" // a kill by another crew member of the player's vehicle
+	AssistHit  = "hit"  // the player hit the victim shortly before its death
+)
+
+// AssistRow is a kill assist one player got for one death.
+type AssistRow struct {
+	Frame       int    `json:"frame"`
+	Player      string `json:"player"`
+	PlayerSquad string `json:"playerSquad"`
+	Kind        string `json:"kind"`
+	Killer      string `json:"killer"`
+	Victim      string `json:"victim"`
+	VictimSquad string `json:"victimSquad"`
+	VictimKind  string `json:"victimKind"`
+}
+
 type MissionResult struct {
-	Duration   float64
-	EndSide    string
-	EndMessage string
-	Players    []PlayerRow
-	Kills      []KillRow
+	Duration float64
+	// CaptureDelay is the length of a frame in seconds.
+	CaptureDelay float64
+	EndSide      string
+	EndMessage   string
+	Players      []PlayerRow
+	Kills        []KillRow
+	Assists      []AssistRow
 }
 
 // DefaultSquadPattern matches "[MILF] Smith". Recruits are written "[~MILF~] Smith"; the
@@ -199,10 +220,27 @@ func (r *Rules) ValidPlayer(name string) bool {
 	return !r.ignore[l]
 }
 
+// credits collects the assists of one death: at most one per player, none for the killer.
+type credits struct {
+	done    map[*PlayerRow]bool
+	players []*PlayerRow
+	kinds   []string
+}
+
+func (c *credits) add(p *PlayerRow, kind string) {
+	if p == nil || c.done[p] {
+		return
+	}
+	c.done[p] = true
+	p.KillAssists++
+	c.players = append(c.players, p)
+	c.kinds = append(c.kinds, kind)
+}
+
 // creditCrewAssists gives a kill assist to every other player in the vehicle the killer was in.
 // Crews are recorded per frame, so the frame before the kill is checked too (the killer may
 // have left the vehicle in the same frame).
-func creditCrewAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k digest.Kill, credited map[*PlayerRow]bool) {
+func creditCrewAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k digest.Kill, c *credits) {
 	for _, frame := range []int{k.Frame, k.Frame - 1} {
 		for _, v := range vehicles {
 			crew := v.CrewAt(frame)
@@ -210,10 +248,7 @@ func creditCrewAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k
 				continue
 			}
 			for _, id := range crew {
-				if p := playerOf[id]; p != nil && !credited[p] {
-					p.KillAssists++
-					credited[p] = true
-				}
+				c.add(playerOf[id], AssistCrew)
 			}
 			return
 		}
@@ -222,7 +257,7 @@ func creditCrewAssists(vehicles []*digest.Entity, playerOf map[int]*PlayerRow, k
 
 // creditHitAssists gives a kill assist to every player of another side who hit the victim
 // after `from` and up to the death frame.
-func creditHitAssists(hits []digest.Hit, playerOf map[int]*PlayerRow, sideOf func(int) string, k digest.Kill, from int, credited map[*PlayerRow]bool) {
+func creditHitAssists(hits []digest.Hit, playerOf map[int]*PlayerRow, sideOf func(int) string, k digest.Kill, from int, c *credits) {
 	vs := sideOf(k.Victim)
 	if vs == "" {
 		return
@@ -231,13 +266,8 @@ func creditHitAssists(hits []digest.Hit, playerOf map[int]*PlayerRow, sideOf fun
 		if h.Frame <= from || h.Frame > k.Frame {
 			continue
 		}
-		p := playerOf[h.Shooter]
-		if p == nil || credited[p] {
-			continue
-		}
 		if ss := sideOf(h.Shooter); ss != "" && ss != vs {
-			p.KillAssists++
-			credited[p] = true
+			c.add(playerOf[h.Shooter], AssistHit)
 		}
 	}
 }
@@ -255,7 +285,8 @@ func creditHitAssists(hits []digest.Hit, playerOf map[int]*PlayerRow, sideOf fun
 //     player was in at that moment (drivers and commanders of the gunner), or the death of an
 //     enemy (player or AI, whoever or whatever killed it) the player hit within Assists.Window
 //     seconds before it and after its previous death, when Assists.Hits is on; at most one
-//     assist per death, and never for the player's own kill.
+//     assist per death, and never for the player's own kill. Every assist is also listed in
+//     MissionResult.Assists with the death it was given for.
 func Compute(d *digest.Digest, rules *Rules) MissionResult {
 	res := MissionResult{Duration: d.Duration()}
 	if d.End != nil {
@@ -320,6 +351,7 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 	if delay <= 0 {
 		delay = 1
 	}
+	res.CaptureDelay = delay
 	assistFrames := int(math.Ceil(float64(rules.assists.Window) / delay))
 	hitsOn := map[int][]digest.Hit{} // victim id -> hits in recording order
 	for _, h := range d.Hits {
@@ -336,9 +368,9 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 			killer = playerOf[k.Killer]
 		}
 		teamKill := false
-		credited := map[*PlayerRow]bool{}
+		credited := &credits{done: map[*PlayerRow]bool{}}
 		if killer != nil {
-			credited[killer] = true
+			credited.done[killer] = true
 			if isVehicle {
 				killer.VehicleKills++
 			} else {
@@ -364,7 +396,7 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 		if victim != nil && !isVehicle {
 			victim.Deaths++
 		}
-		if killer == nil && victim == nil {
+		if killer == nil && victim == nil && len(credited.players) == 0 {
 			continue
 		}
 
@@ -393,7 +425,15 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 				row.Victim = victimEnt.Name
 			}
 		}
-		res.Kills = append(res.Kills, row)
+		for i, p := range credited.players {
+			res.Assists = append(res.Assists, AssistRow{
+				Frame: k.Frame, Player: p.Name, PlayerSquad: p.Squad, Kind: credited.kinds[i],
+				Killer: row.Killer, Victim: row.Victim, VictimSquad: row.VictimSquad, VictimKind: row.VictimKind,
+			})
+		}
+		if killer != nil || victim != nil {
+			res.Kills = append(res.Kills, row)
+		}
 	}
 
 	for _, h := range d.Hits {

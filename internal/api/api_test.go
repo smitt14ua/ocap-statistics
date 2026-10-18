@@ -222,6 +222,21 @@ func TestSyncAndAPI(t *testing.T) {
 		t.Errorf("unknown player: %d", rec.Code)
 	}
 
+	// A mission lists its kills and who got the assists.
+	var mission struct {
+		Mission struct{ CaptureDelay float64 }
+		Kills   []struct{ Killer, Victim string }
+		Assists []struct{ Player, Kind, Killer, Victim string }
+	}
+	get(t, h, "/api/v1/missions/1", &mission)
+	if mission.Mission.CaptureDelay != 1 || len(mission.Kills) != 7 || len(mission.Assists) != 1 ||
+		mission.Assists[0].Player != "Rookie" || mission.Assists[0].Kind != "crew" || mission.Assists[0].Killer != "Smith" {
+		t.Errorf("mission detail: %+v", mission)
+	}
+	if rec := get(t, h, "/api/v1/missions/99", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown mission: %d", rec.Code)
+	}
+
 	var rot struct {
 		Rotation struct {
 			Sides []struct{ Wins int }
