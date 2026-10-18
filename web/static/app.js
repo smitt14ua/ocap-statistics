@@ -43,6 +43,52 @@ const fmtClock = (sec) => {
 const SIDE_COLORS = { WEST: '#3b82f6', EAST: '#ef4444', GUER: '#22c55e', CIV: '#a855f7' };
 const sideDot = (side) => el('span', { class: 'swatch', style: `background:${SIDE_COLORS[side] || '#888'}`, 'aria-hidden': 'true' });
 
+// A cell sorts by its data-sort value when it has one, otherwise by its text; empty cells and
+// dashes have no value and always go last.
+const sortKey = (td) => {
+  const v = td.dataset.sort ?? td.textContent.trim();
+  return v === '' || v === '—' || v === '-' ? null : v;
+};
+
+// sortable turns the headers of a table into sort buttons. Numeric columns sort descending
+// first, text ascending. initial = [column, ascending] marks the order the rows already come in.
+function sortable(table, initial = null) {
+  const head = table.tHead.rows[0];
+  const body = table.tBodies[0];
+  let state = initial;
+  const keys = (col) => [...body.rows].map(r => (r.cells.length === head.cells.length ? sortKey(r.cells[col]) : null));
+  const numeric = (ks) => ks.every(k => k === null || !Number.isNaN(Number(k)));
+  const mark = () => [...head.cells].forEach((th, i) => {
+    if (state && state[0] === i) th.setAttribute('aria-sort', state[1] ? 'ascending' : 'descending');
+    else th.removeAttribute('aria-sort');
+  });
+  const apply = () => {
+    const rows = [...body.rows];
+    // A single "no data" row spans all columns and is not sorted.
+    if (!state || rows.some(r => r.cells.length !== head.cells.length)) return;
+    const [col, asc] = state;
+    const ks = keys(col);
+    const num = numeric(ks);
+    const order = rows.map((_, i) => i).sort((a, b) => {
+      const x = ks[a], y = ks[b];
+      if (x === null || y === null) return (x === null) - (y === null) || a - b;
+      const c = num ? Number(x) - Number(y) : x.localeCompare(y, undefined, { sensitivity: 'base', numeric: true });
+      return (asc ? c : -c) || a - b;
+    });
+    body.append(...order.map(i => rows[i]));
+  };
+  [...head.cells].forEach((th, col) => {
+    const button = el('button', { type: 'button', class: 'sort' }, ...th.childNodes);
+    th.replaceChildren(button);
+    button.addEventListener('click', () => {
+      state = state && state[0] === col ? [col, !state[1]] : [col, !numeric(keys(col))];
+      mark();
+      apply();
+    });
+  });
+  mark();
+}
+
 // html2canvas is only needed for screenshots, so it is loaded on demand and pinned by
 // Subresource Integrity.
 const LIBS = {
@@ -561,10 +607,14 @@ class StatsApp {
       })) : el('div', { class: 'muted' }, t('list.empty')));
   }
 
-  dataTable(headers, rows) {
-    return el('div', { class: 'table-wrap', tabindex: 0 }, el('table', {},
+  // dataTable builds a table; with sort ([column, ascending] of the order the rows come in) its
+  // columns are sortable.
+  dataTable(headers, rows, sort = null) {
+    const table = el('table', {},
       el('thead', {}, el('tr', {}, headers.map(h => el('th', {}, t(h))))),
-      el('tbody', {}, rows)));
+      el('tbody', {}, rows));
+    if (sort) sortable(table, sort);
+    return el('div', { class: 'table-wrap', tabindex: 0 }, table);
   }
 
   // showDetail shows a view in the detail modal. A view opened from another one (missions →
@@ -706,11 +756,11 @@ class StatsApp {
             el('td', {}, p.shotsFired), el('td', {}, p.hits), el('td', {}, p.shotsFired ? fmt(Math.min(100, p.hits / p.shotsFired * 100)) : fmt(0)));
           tr.addEventListener('click', open);
           return tr;
-        })),
+        }), [3, false]),
       squads: this.dataTable(['col.squad', 'col.players', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.accuracy', 'col.kd'],
         [...d.squads].sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name)).map(s => el('tr', {},
           el('td', {}, s.name || t('noSquad')), el('td', {}, s.players), el('td', {}, s.kills), el('td', {}, s.deaths), el('td', {}, s.teamKills),
-          el('td', {}, s.vehiclesDestroyed), el('td', {}, s.killAssists), el('td', {}, fmt(s.accuracy)), el('td', {}, fmt(s.kd))))),
+          el('td', {}, s.vehiclesDestroyed), el('td', {}, s.killAssists), el('td', {}, fmt(s.accuracy)), el('td', {}, fmt(s.kd)))), [2, false]),
       feed: feed.node,
     });
     return [
@@ -811,7 +861,7 @@ class StatsApp {
           suicide ? el('span', { class: 'badge' }, t('feed.suicide')) : null,
           e.victimKind === 'ai' ? el('span', { class: 'badge' }, t('feed.ai')) : null,
           e.victimKind === 'vehicle' ? el('span', { class: 'badge' }, e.vehicleClass || t('feed.vehicle')) : null),
-        el('td', {}, e.weapon || '—'),
+        el('td', { class: 'weapon' }, this.weaponCell(e.weapon)),
         el('td', { class: 'num' }, e.distance ? Math.round(e.distance) : '—'),
         el('td', { class: 'assists' }, e.assists.length ? e.assists.flatMap((a, i) => [i ? ', ' : null,
           el('span', { class: `who${a.player === me ? ' me' : ''}`, title: t(`assist.${a.kind}`) }, a.player)]) : '—'));
@@ -843,6 +893,13 @@ class StatsApp {
       ],
       select: (name) => { select.value = name; render(); },
     };
+  }
+
+  // weaponCell splits OCAP's "Vehicle: weapon" into two lines, the vehicle first.
+  weaponCell(weapon) {
+    if (!weapon) return '—';
+    const i = weapon.indexOf(': ');
+    return i < 0 ? weapon : [weapon.slice(0, i), el('small', {}, weapon.slice(i + 2))];
   }
 
   openRotation() {
