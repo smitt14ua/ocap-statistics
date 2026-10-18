@@ -352,6 +352,7 @@
   'mission.tab.squads': 'Oddíly',
   'mission.tab.feed': 'Přehled zabití',
   'feed.allPlayers': 'Všichni',
+  'feed.reset': 'Zobrazit všechny',
   'feed.summary': 'zabití {k} · úmrtí {d} · asistence {a} · vozidla {v}',
   'feed.unknown': 'neznámý',
   'feed.suicide': 'sebevražda',

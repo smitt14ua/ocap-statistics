@@ -352,6 +352,7 @@
   'mission.tab.squads': 'Oddziały',
   'mission.tab.feed': 'Lista zabójstw',
   'feed.allPlayers': 'Wszyscy',
+  'feed.reset': 'Pokaż wszystkich',
   'feed.summary': 'zabójstwa {k} · śmierci {d} · asysty {a} · pojazdy {v}',
   'feed.unknown': 'nieznany',
   'feed.suicide': 'samobójstwo',

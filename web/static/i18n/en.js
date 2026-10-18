@@ -353,6 +353,7 @@
   'mission.tab.squads': 'Squads',
   'mission.tab.feed': 'Kill feed',
   'feed.allPlayers': 'Everyone',
+  'feed.reset': 'Show everyone',
   'feed.summary': 'kills {k} · deaths {d} · assists {a} · vehicles {v}',
   'feed.unknown': 'unknown',
   'feed.suicide': 'suicide',

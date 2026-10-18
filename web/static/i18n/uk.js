@@ -352,6 +352,7 @@
   'mission.tab.squads': 'Відділення',
   'mission.tab.feed': 'Стрічка вбивств',
   'feed.allPlayers': 'Усі',
+  'feed.reset': 'Показати всіх',
   'feed.summary': 'вбивства {k} · смерті {d} · допомога {a} · техніка {v}',
   'feed.unknown': 'невідомо',
   'feed.suicide': 'самогубство',

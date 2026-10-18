@@ -352,6 +352,7 @@
   'mission.tab.squads': 'Жасақтар',
   'mission.tab.feed': 'Өлтірулер тізбегі',
   'feed.allPlayers': 'Барлығы',
+  'feed.reset': 'Барлығын көрсету',
   'feed.summary': 'өлтірулер {k} · өлімдер {d} · көмек {a} · техника {v}',
   'feed.unknown': 'белгісіз',
   'feed.suicide': 'өз-өзін өлтіру',

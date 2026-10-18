@@ -50,8 +50,10 @@ const sortKey = (td) => {
   return v === '' || v === '—' || v === '-' ? null : v;
 };
 
-// sortable turns the headers of a table into sort buttons. Numeric columns sort descending
-// first, text ascending. initial = [column, ascending] marks the order the rows already come in.
+// sortable turns the headers of a table into sort buttons (columns with data-nosort stay
+// plain). Numeric columns sort descending first, text ascending. initial = [column, ascending]
+// marks the order the rows already come in. It returns a function that sorts the rows again,
+// for tables whose rows are replaced.
 function sortable(table, initial = null) {
   const head = table.tHead.rows[0];
   const body = table.tBodies[0];
@@ -78,6 +80,7 @@ function sortable(table, initial = null) {
     body.append(...order.map(i => rows[i]));
   };
   [...head.cells].forEach((th, col) => {
+    if ('nosort' in th.dataset) return;
     const button = el('button', { type: 'button', class: 'sort' }, ...th.childNodes);
     th.replaceChildren(button);
     button.addEventListener('click', () => {
@@ -87,6 +90,7 @@ function sortable(table, initial = null) {
     });
   });
   mark();
+  return apply;
 }
 
 // html2canvas is only needed for screenshots, so it is loaded on demand and pinned by
@@ -849,12 +853,12 @@ class StatsApp {
     const who = (name, squad, side, kind, me) => {
       if (!name) return el('span', { class: 'who none' }, t('feed.unknown'));
       return el('span', { class: `who${kind === 'player' ? '' : ' ai'}${me ? ' me' : ''}` },
-        side ? sideDot(side) : null, name, squad ? el('span', { class: 'squad' }, ` [${squad}]`) : null);
+        side ? sideDot(side) : null, squad ? el('span', { class: 'squad' }, `[${squad}] `) : null, name);
     };
     const row = (e, me) => {
       const suicide = e.killer === e.victim && !e.killerIsPlayer && e.victimKind === 'player';
       return el('tr', {},
-        el('td', { class: 'time' }, fmtClock(e.frame * delay)),
+        el('td', { class: 'time', 'data-sort': e.frame }, fmtClock(e.frame * delay)),
         el('td', {}, suicide ? el('span', { class: 'who none' }, '—') : who(e.killer, e.killerSquad, e.killerSide, e.killerIsPlayer ? 'player' : 'ai', e.killer === me && e.killerIsPlayer),
           // The recording named no killer; the kill was credited for the last damage.
           e.cause ? el('span', { class: 'badge', title: t(`feed.cause.${e.cause}.title`) }, t(`feed.cause.${e.cause}`)) : null),
@@ -864,7 +868,7 @@ class StatsApp {
           e.victimKind === 'ai' ? el('span', { class: 'badge' }, t('feed.ai')) : null,
           e.victimKind === 'vehicle' ? el('span', { class: 'badge' }, e.vehicleClass || t('feed.vehicle')) : null),
         el('td', { class: 'weapon' }, this.weaponCell(e.weapon)),
-        el('td', { class: 'num' }, e.distance ? Math.round(e.distance) : '—'),
+        el('td', { class: 'num', 'data-sort': e.distance || '' }, e.distance ? Math.round(e.distance) : '—'),
         el('td', { class: 'assists' }, e.assists.length ? e.assists.flatMap((a, i) => [i ? ', ' : null,
           el('span', { class: `who${a.player === me ? ' me' : ''}`, title: t(`assist.${a.kind}`) }, a.player)]) : '—'));
     };
@@ -872,26 +876,36 @@ class StatsApp {
     const select = el('select', { id: 'feedPlayer' },
       el('option', { value: '' }, t('feed.allPlayers')),
       [...d.players].sort((a, b) => a.name.localeCompare(b.name)).map(p => el('option', { value: p.name }, p.name)));
+    // Picking "everyone" again in a long list is tedious, so a selected player has a reset button.
+    const reset = el('button', { type: 'button', class: 'small', hidden: true }, el('span', { 'aria-hidden': 'true' }, '×'), t('feed.reset'));
     const summary = el('span', { class: 'summary', 'aria-live': 'polite' });
     const body = el('tbody');
+    // Only time and distance sort; the feed opens in time order.
+    const sortableCols = ['col.time', 'col.distance'];
+    const table = el('table', { class: 'feed' },
+      el('thead', {}, el('tr', {}, ['col.time', 'col.killer', 'col.victim', 'col.weapon', 'col.distance', 'col.assistedBy']
+        .map(h => el('th', { 'data-nosort': sortableCols.includes(h) ? null : '' }, t(h))))),
+      body);
+    const resort = sortable(table, [0, true]);
     const render = () => {
       const me = select.value;
       view.player = me;
+      reset.hidden = !me;
       const list = me ? events.filter(e => involves(e, me)) : events;
       const p = me && d.players.find(x => x.name === me);
       summary.textContent = p ? t('feed.summary', { k: p.kills, d: p.deaths, a: p.killAssists, v: p.vehiclesDestroyed }) : '';
       body.replaceChildren(...(list.length ? list.map(e => row(e, me))
         : [el('tr', {}, el('td', { colspan: 6, class: 'muted' }, t('list.empty')))]));
+      resort();
     };
     select.addEventListener('change', render);
+    reset.addEventListener('click', () => { select.value = ''; render(); select.focus(); });
     select.value = view.player || '';
     render();
     return {
       node: [
-        el('div', { class: 'feed-filter' }, el('label', { for: 'feedPlayer' }, t('col.player')), select, summary),
-        el('div', { class: 'table-wrap', tabindex: 0 }, el('table', { class: 'feed' },
-          el('thead', {}, el('tr', {}, ['col.time', 'col.killer', 'col.victim', 'col.weapon', 'col.distance', 'col.assistedBy'].map(h => el('th', {}, t(h))))),
-          body)),
+        el('div', { class: 'feed-filter' }, el('label', { for: 'feedPlayer' }, t('col.player')), select, reset, summary),
+        el('div', { class: 'table-wrap', tabindex: 0 }, table),
       ],
       select: (name) => { select.value = name; render(); },
     };

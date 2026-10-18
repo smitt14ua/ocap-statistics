@@ -352,6 +352,7 @@
   'mission.tab.squads': 'Squads',
   'mission.tab.feed': 'Killfeed',
   'feed.allPlayers': 'Alle',
+  'feed.reset': 'Alle anzeigen',
   'feed.summary': 'Kills {k} · Tode {d} · Assists {a} · Fahrzeuge {v}',
   'feed.unknown': 'unbekannt',
   'feed.suicide': 'Selbstmord',
