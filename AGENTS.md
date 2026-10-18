@@ -37,7 +37,7 @@ Guard tests that encode project rules (prefer adding a test over adding prose he
 | `internal/api/server_test.go` `TestStaticHandler` | CSP and framing headers, gzip/ETag, no path traversal |
 | `internal/stats/compute_test.go` | counting rules on the fixture `internal/stats/testdata/recording.json` |
 
-CI (`.github/workflows/ci.yml`) runs the same checks and publishes `ghcr.io/<owner>/ocap-statistics` for linux/amd64 and linux/arm64 on pushes to `main`. It compiles the binaries outside Docker (with a cached Go build) and builds the image with `--target prebuilt` of the `Dockerfile`; the default target still builds from source. After a push to `main` it calls the deploy webhook in the `DOKPLOY_DEPLOY_WEBHOOK` secret, if the repository has one.
+CI (`.github/workflows/ci.yml`) runs the same checks and publishes `ghcr.io/<owner>/ocap-statistics` for linux/amd64 and linux/arm64 on pushes to `main`. It compiles the binaries outside Docker (with a cached Go build) and builds the image with `--target prebuilt` of the `Dockerfile`; the default target still builds from source.
 
 ## Repository map
 
