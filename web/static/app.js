@@ -612,10 +612,10 @@ class StatsApp {
   }
 
   // dataTable builds a table; with sort ([column, ascending] of the order the rows come in) its
-  // columns are sortable.
-  dataTable(headers, rows, sort = null) {
+  // columns are sortable, or only the columns listed in only.
+  dataTable(headers, rows, sort = null, only = null) {
     const table = el('table', {},
-      el('thead', {}, el('tr', {}, headers.map(h => el('th', {}, t(h))))),
+      el('thead', {}, el('tr', {}, headers.map((h, i) => el('th', { 'data-nosort': only && !only.includes(i) ? '' : null }, t(h))))),
       el('tbody', {}, rows));
     if (sort) sortable(table, sort);
     return el('div', { class: 'table-wrap', tabindex: 0 }, table);
@@ -722,14 +722,15 @@ class StatsApp {
             const open = () => this.openMission(m.id, m.name);
             const replay = this.replayURL(m.id, m.filename);
             const tr = el('tr', { class: 'clickable' },
-              el('td', {}, m.date),
+              // Missions of one day keep their order (newest recording first) when sorted by date.
+              el('td', { 'data-sort': `${m.date} ${String(m.id).padStart(12, '0')}` }, m.date),
               el('td', {}, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, m.name)),
-              el('td', {}, m.world), el('td', {}, fmtDuration(m.duration)), el('td', {}, m.playerCount),
+              el('td', {}, m.world), el('td', { 'data-sort': m.duration }, fmtDuration(m.duration)), el('td', {}, m.playerCount),
               el('td', { title: m.endMessage || null }, m.endSide ? [sideDot(m.endSide), m.endSide] : el('span', { class: 'muted' }, '—')),
               el('td', {}, replay ? el('a', { href: replay, target: '_blank', rel: 'noopener', 'aria-label': t('mission.openReplay'), title: t('mission.openReplay'), onclick: (e) => e.stopPropagation() }, '▶') : '—'));
             tr.addEventListener('click', open);
             return tr;
-          })) : el('p', { class: 'muted' }, t('n.noMissions')),
+          }), [0, false], [0, 3, 4]) : el('p', { class: 'muted' }, t('n.noMissions')),
       ];
     });
   }
