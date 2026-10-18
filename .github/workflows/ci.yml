@@ -36,13 +36,20 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      # The binaries are built here rather than in Docker: the Go build cache is restored
+      # between runs, so only changed packages compile (not the SQLite driver every time).
+      - uses: actions/setup-go@v5
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v4
+        with:
+          # Its own key: the test job's cache has no arm64 or non-race objects.
+          key: go-image-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: go-image-${{ runner.os }}-
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -52,16 +59,44 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
+      - name: Build binaries
+        env:
+          LDFLAGS: -s -w -X main.version=${{ steps.meta.outputs.version }} -X main.commit=${{ github.sha }} -X main.date=${{ github.event.head_commit.timestamp }}
+        run: |
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="$LDFLAGS" -o dist/ocap-stats-linux-$arch ./cmd/ocap-stats
+          done
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
           context: .
+          target: prebuilt
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
-            COMMIT=${{ github.sha }}
-            DATE=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    # Redeploys a running instance after a new image on main, through a deploy webhook (for
+    # example Dokploy's) kept in the DOKPLOY_DEPLOY_WEBHOOK secret. Skipped without the secret.
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the deploy webhook
+        env:
+          WEBHOOK: ${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "::notice::DOKPLOY_DEPLOY_WEBHOOK is not set, nothing to deploy"
+            exit 0
+          fi
+          curl -fsS --retry 3 --max-time 30 -X POST -H 'Content-Type: application/json' -d '{}' "$WEBHOOK" -o /dev/null

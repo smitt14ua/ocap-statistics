@@ -1,5 +1,6 @@
 /ocap-stats
 /ocap-stats.exe
+/dist/
 /data/
 *.db
 *.db-shm
