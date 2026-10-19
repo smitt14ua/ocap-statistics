@@ -12,7 +12,7 @@ OCAP ──(every 10 min: list of recordings)──► ocap-stats ──► SQLi
 ## Features
 
 - **Automatic ingestion.** New recordings are picked up on a schedule; recordings deleted or re-tagged in OCAP disappear from the statistics. Recordings can be read straight from OCAP's data directory when the service runs on the same host.
-- **Statistics:** kills, deaths, team kills, destroyed vehicles, kill assists (kills by other crew members of your vehicle, deaths of enemies you hit shortly before), accuracy, attendance, K/D, achievements, squad leaderboard, rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), a list of missions with a page for each: result, sides, players and squads, a kill feed showing who killed whom and who got the assists, and a link to the replay in OCAP.
+- **Statistics:** kills, deaths, team kills, destroyed vehicles, kill assists (kills by other crew members of your vehicle, deaths of enemies you hit shortly before), medical points (ACE treatments of other players and revives), accuracy, attendance, K/D, achievements, squad leaderboard, rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), a list of missions with a page for each: result, sides, players and squads, a kill feed showing who killed whom and who got the assists, and a link to the replay in OCAP.
 - **Squads from nicknames.** `[ALPHA] John` is player `John` in squad `ALPHA`; recruits (`[~ALPHA~] John`) count in their squad like everyone else. The nickname format, squad aliases and ignored names are configurable.
 - **REST API** with OpenAPI documentation at `/api/docs`, CSV export, ETag caching and CORS.
 - **Web page** with filters, player/squad views, Excel export, top-10 and rotation screenshots to the clipboard and links to the replays in OCAP.
@@ -96,6 +96,7 @@ Statistics settings (tags, start date, minimum duration, nickname format, aliase
 | `stats.minMissions` | `OCAPSTATS_MIN_MISSIONS` | `0` | Players and squads with fewer missions in the selected period are not listed (their missions still count for their squads) |
 | `stats.assists.hits` | `OCAPSTATS_HIT_ASSISTS` | `true` | Give a kill assist for hitting an enemy shortly before its death |
 | `stats.assists.window` | `OCAPSTATS_ASSIST_WINDOW` | `300` | How long before the death (seconds, 1–3600) a hit counts for an assist |
+| `stats.medical.treatment`, `stats.medical.revive` | — | `1`, `5` | Medical points per treatment of another player and per revive (0–1000) |
 | `stats.squadPattern` | `OCAPSTATS_SQUAD_PATTERN` | `\[~?(.*?)~?\]\s*` | Regex for the squad in a nickname; group 1 is the squad, the whole match is cut from the name |
 | `stats.squadAliases` | — | — | Squad spellings merged into one squad, e.g. `{"A.L.P.H.A.": "ALPHA"}` |
 | `stats.ignoreNames` | — | — | Player names never counted (headless clients and `__SERVER__` are always skipped) |
@@ -155,6 +156,9 @@ Per mission:
 - **Team kill:** a kill of a player on the killer's side.
 - **Death:** a `killed` event whose victim is a player (suicides included).
 - **Accuracy:** hits by the player on non-vehicle targets / shots fired × 100.
+- **Treatment:** an entry another player wrote into a player's ACE medical activity log (bandage, tourniquet, splint, medication, IV, CPR, …), taken from the `medicalSnapshot` events of recent OCAP versions. Treating oneself does not count. ACE keeps only the last entries of the log and OCAP writes snapshots every few seconds, so a burst of more treatments than the log holds between two snapshots is counted partly. Only players have snapshots: treating AI is not counted.
+- **Revive:** an unconscious player (`ace3Unconscious`) woke up without dying in between, after another player treated them. It goes to the last such medic before the wake-up, or to the first one seen within 15 seconds after it (the log reaches the recording with the next snapshot).
+- **Medical points:** treatments × `stats.medical.treatment` + revives × `stats.medical.revive` (1 and 5 by default, editable in the admin panel; applied when the statistics are shown, so changing them needs no recompute).
 - **Attendance:** number of counted missions (missions shorter than the minimum duration are not counted).
 
 Over a period:
@@ -167,7 +171,7 @@ Over a period:
 
 ### Custom columns
 
-Formulas use the variables `kills`, `deaths`, `teamKills`, `vehiclesDestroyed`, `killAssists`, `shotsFired`, `hits`, `accuracy`, `kd`, `attendance`, `players`, `squadMissions`, `maxAttendance`, `missions` and `isSquad`; the operators `+ - * / % ^`, comparisons and `&& || !`; and the functions `abs sqrt exp ln log log10 floor ceil round min max pow if`. For squads the statistics are squad totals and `attendance` is the average per player. A division by zero gives an empty value. The admin panel has a full reference and checks formulas against real data before saving.
+Formulas use the variables `kills`, `deaths`, `teamKills`, `vehiclesDestroyed`, `killAssists`, `shotsFired`, `hits`, `accuracy`, `kd`, `attendance`, `players`, `squadMissions`, `maxAttendance`, `missions`, `isSquad`, `treatments`, `revives` and `medicalPoints`; the operators `+ - * / % ^`, comparisons and `&& || !`; and the functions `abs sqrt exp ln log log10 floor ceil round min max pow if`. For squads the statistics are squad totals and `attendance` is the average per player. A division by zero gives an empty value. The admin panel has a full reference and checks formulas against real data before saving.
 
 When the counting rules or the nickname format change, statistics are recomputed from the stored digests without downloading recordings again.
 

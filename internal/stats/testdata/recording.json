@@ -26,6 +26,10 @@
     [150, "killed", 0, ["null", ""], 0],
     [160, "killed", 2, [2, "Grenade"], 0],
     [170, "killed", 5, [0, "Javelin"], 900],
+    [175, "ace3Unconscious", {"SoldierID": 0, "IsUnconscious": true}],
+    [180, "medicalSnapshot", {"unitId": 0, "playerUid": "76561190000000001", "reason": "periodic",
+      "activity": [{"text": "[~milf~]Rookie has bandaged patient", "time": "12:00"}]}],
+    [185, "ace3Unconscious", {"SoldierID": 0, "IsUnconscious": false}],
     [1299, "endMission", ["WEST", "Blufor wins"]]
   ]
 }

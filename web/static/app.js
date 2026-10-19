@@ -20,6 +20,8 @@ const el = (tag, props = {}, ...children) => {
 const $ = (id) => document.getElementById(id);
 
 const fmt = (v, digits = 2) => Number(v || 0).toFixed(digits);
+// Medical points are whole unless the weights are fractional.
+const fmtPoints = (v) => Number.isInteger(v || 0) ? String(v || 0) : fmt(v);
 const fmtDuration = (sec) => t('duration', { m: Math.floor(sec / 60), s: Math.floor(sec % 60) });
 // Elapsed time in the unit that keeps the number short: 850 µs, 4.2 ms, 142 ms, 3.25 s, 1 min 5 s.
 // Browsers coarsen performance.now() to ~0.1 ms, so nothing finer than microseconds is meaningful.
@@ -505,9 +507,14 @@ class StatsApp {
       squads ? x.players : (x.squadRaw || '-'),
       x.kills, x.deaths, x.teamKills,
       squads ? fmt(x.avgAttendance) : x.attendance,
-      fmt(x.accuracy) + '%', x.vehiclesDestroyed, x.killAssists, fmt(x.kd),
+      fmt(x.accuracy) + '%', x.vehiclesDestroyed, x.killAssists, this.medical(x), fmt(x.kd),
       ...this.columns(squads).map(c => this.customValue(x, c)),
     ];
+  }
+
+  // medical shows medical points with the treatments and revives behind them as a tooltip.
+  medical(x) {
+    return el('span', { title: t('med.cell', { t: x.treatments, r: x.revives }) }, fmtPoints(x.medicalPoints));
   }
 
   render() {
@@ -539,7 +546,7 @@ class StatsApp {
       return tr;
     });
     if (!rows.length) {
-      rows.push(el('tr', {}, el('td', { colspan: 11 + this.columns(squads).length, class: 'muted' }, this.data ? t('table.empty') : t('status.loading'))));
+      rows.push(el('tr', {}, el('td', { colspan: 12 + this.columns(squads).length, class: 'muted' }, this.data ? t('table.empty') : t('status.loading'))));
     }
     this.table.querySelector('tbody').replaceChildren(...rows);
   }
@@ -552,6 +559,7 @@ class StatsApp {
     const cards = [
       { award: a.topKiller, label: 'ach.topKiller', unit: 'unit.kills' },
       { award: a.topAssists, label: 'ach.topAssists', unit: 'unit.assists' },
+      { award: a.topMedic, label: 'ach.topMedic', unit: 'unit.points', points: true },
       { award: a.topTeamKiller, label: 'ach.topTeamKiller', unit: 'unit.teamKills' },
       { award: a.topVehicles, label: 'ach.topVehicles', unit: 'unit.vehicles' },
       { award: a.topSquad && { name: a.topSquad.name, value: a.topSquad.kd }, label: 'ach.topSquad', unit: 'unit.kd', squad: true, sub: () => t('ach.bestSquad') },
@@ -560,7 +568,7 @@ class StatsApp {
     $('achievements').replaceChildren(...cards.map(c => {
       const p = c.award;
       const node = el(p ? 'button' : 'div', { type: p ? 'button' : null, class: `award${p ? ' clickable' : ''}`, title: p && c.title ? c.title(p) : null },
-        el('div', { class: 'num' }, el('b', {}, p ? (c.squad ? fmt(p.value) : Math.round(p.value)) : 0), el('span', {}, t(c.unit))),
+        el('div', { class: 'num' }, el('b', {}, p ? (c.squad ? fmt(p.value) : c.points ? fmtPoints(p.value) : Math.round(p.value)) : 0), el('span', {}, t(c.unit))),
         el('div', { class: 'who' }, el('small', {}, t(c.label)), el('b', {}, p ? p.name : '—'), el('span', {}, p ? (c.sub ? c.sub(p) : squadOf(p)) : '—')));
       if (p) node.addEventListener('click', () => c.squad ? this.openSquad(p.name) : this.openPlayer(p.name));
       return node;
@@ -669,7 +677,8 @@ class StatsApp {
         this.tiles([
           ['col.kills', p.kills], ['col.deaths', p.deaths], ['col.teamKills.title', p.teamKills], ['col.vehicles.title', p.vehiclesDestroyed],
           ['tile.assists', p.killAssists], ['col.kd', fmt(p.kd)], ['col.accuracy', fmt(p.accuracy)], ['tile.missions', p.attendance],
-          ['tile.shots', p.shotsFired], ...this.columns(false).map(c => [c.name, this.customValue(p, c), true]),
+          ['tile.shots', p.shotsFired], ['tile.medical', fmtPoints(p.medicalPoints)], ['tile.treatments', p.treatments], ['tile.revives', p.revives],
+          ...this.columns(false).map(c => [c.name, this.customValue(p, c), true]),
         ]),
         lk ? el('p', { class: 'note' }, t('detail.longestKill', { d: Math.round(lk.distance), victim: lk.victim, weapon: lk.weapon, date: lk.date })) : null,
         el('div', { class: 'lists' },
@@ -677,11 +686,12 @@ class StatsApp {
           this.list('list.victims', d.victims, (n) => this.openPlayer(n)),
           this.list('list.killedBy', d.killedBy, (n) => this.openPlayer(n)),
           this.list('list.squads', d.squads, (n) => this.openSquad(n))),
-        this.dataTable(['col.date', 'col.mission', 'col.map', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists'],
+        this.dataTable(['col.date', 'col.mission', 'col.map', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.medical'],
           d.missions.map(m => el('tr', {},
             el('td', {}, m.date), el('td', {}, el('button', { type: 'button', class: 'link', onclick: () => this.openMission(m.missionId, m.name) }, m.name)), el('td', {}, m.world),
             el('td', {}, m.squadRaw || '-'), el('td', {}, m.side),
-            el('td', {}, m.kills), el('td', {}, m.deaths), el('td', {}, m.teamKills), el('td', {}, m.vehiclesDestroyed), el('td', {}, m.killAssists)))),
+            el('td', {}, m.kills), el('td', {}, m.deaths), el('td', {}, m.teamKills), el('td', {}, m.vehiclesDestroyed), el('td', {}, m.killAssists),
+            el('td', {}, this.medical(m))))),
       ];
     });
   }
@@ -695,15 +705,16 @@ class StatsApp {
         this.tiles([
           ['col.players', s.players], ['tile.missions', s.missions], ['col.kills', s.kills], ['col.deaths', s.deaths],
           ['col.teamKills.title', s.teamKills], ['col.vehicles.title', s.vehiclesDestroyed], ['tile.assists', s.killAssists],
-          ['col.kd', fmt(s.kd)], ['col.accuracy', fmt(s.accuracy)], ...this.columns(true).map(c => [c.name, this.customValue(s, c), true]),
+          ['col.kd', fmt(s.kd)], ['col.accuracy', fmt(s.accuracy)], ['tile.medical', fmtPoints(s.medicalPoints)], ['tile.treatments', s.treatments],
+          ['tile.revives', s.revives], ...this.columns(true).map(c => [c.name, this.customValue(s, c), true]),
         ]),
         el('div', { style: 'height:16px' }),
-        this.dataTable(['col.name', 'col.tag', 'col.missions', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.accuracy', 'col.kd'],
+        this.dataTable(['col.name', 'col.tag', 'col.missions', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.medical', 'col.accuracy', 'col.kd'],
           d.members.map(p => {
             const tr = el('tr', { class: 'clickable' },
               el('td', {}, p.name), el('td', {}, p.squadRaw || '-'), el('td', {}, p.attendance),
               el('td', {}, p.kills), el('td', {}, p.deaths), el('td', {}, p.teamKills),
-              el('td', {}, p.vehiclesDestroyed), el('td', {}, p.killAssists), el('td', {}, fmt(p.accuracy)), el('td', {}, fmt(p.kd)));
+              el('td', {}, p.vehiclesDestroyed), el('td', {}, p.killAssists), el('td', {}, this.medical(p)), el('td', {}, fmt(p.accuracy)), el('td', {}, fmt(p.kd)));
             tr.addEventListener('click', () => this.openPlayer(p.name));
             return tr;
           })),
@@ -751,7 +762,7 @@ class StatsApp {
     const replay = this.replayURL(m.id, m.filename);
     const feed = this.missionFeed(d, view);
     const tabs = this.missionTabs(view, {
-      players: this.dataTable(['col.name', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'tile.shots', 'col.hits', 'col.accuracy'],
+      players: this.dataTable(['col.name', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.medical', 'tile.shots', 'col.hits', 'col.accuracy'],
         players.map(p => {
           // A player opens the kill feed filtered to what they did and what happened to them.
           const open = () => { feed.select(p.name); tabs.show('feed'); };
@@ -759,14 +770,14 @@ class StatsApp {
             el('td', {}, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, p.name)),
             el('td', {}, p.squadRaw || '-'), el('td', {}, sideDot(p.side), p.side),
             el('td', {}, p.kills), el('td', {}, p.deaths), el('td', {}, p.teamKills), el('td', {}, p.vehiclesDestroyed), el('td', {}, p.killAssists),
-            el('td', {}, p.shotsFired), el('td', {}, p.hits), el('td', {}, p.shotsFired ? fmt(Math.min(100, p.hits / p.shotsFired * 100)) : fmt(0)));
+            el('td', {}, this.medical(p)), el('td', {}, p.shotsFired), el('td', {}, p.hits), el('td', {}, p.shotsFired ? fmt(Math.min(100, p.hits / p.shotsFired * 100)) : fmt(0)));
           tr.addEventListener('click', open);
           return tr;
         }), [3, false]),
-      squads: this.dataTable(['col.squad', 'col.players', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.accuracy', 'col.kd'],
+      squads: this.dataTable(['col.squad', 'col.players', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.medical', 'col.accuracy', 'col.kd'],
         [...d.squads].sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name)).map(s => el('tr', {},
           el('td', {}, s.name || t('noSquad')), el('td', {}, s.players), el('td', {}, s.kills), el('td', {}, s.deaths), el('td', {}, s.teamKills),
-          el('td', {}, s.vehiclesDestroyed), el('td', {}, s.killAssists), el('td', {}, fmt(s.accuracy)), el('td', {}, fmt(s.kd)))), [2, false]),
+          el('td', {}, s.vehiclesDestroyed), el('td', {}, s.killAssists), el('td', {}, this.medical(s)), el('td', {}, fmt(s.accuracy)), el('td', {}, fmt(s.kd)))), [2, false]),
       feed: feed.node,
     });
     return [
@@ -788,16 +799,17 @@ class StatsApp {
   sideCards(players, winner) {
     const sides = new Map();
     for (const p of players) {
-      const s = sides.get(p.side) || { side: p.side, players: 0, kills: 0, deaths: 0, teamKills: 0, vehiclesDestroyed: 0, killAssists: 0 };
+      const s = sides.get(p.side) || { side: p.side, players: 0, kills: 0, deaths: 0, teamKills: 0, vehiclesDestroyed: 0, killAssists: 0, medicalPoints: 0 };
       s.players++;
-      for (const f of ['kills', 'deaths', 'teamKills', 'vehiclesDestroyed', 'killAssists']) s[f] += p[f];
+      for (const f of ['kills', 'deaths', 'teamKills', 'vehiclesDestroyed', 'killAssists', 'medicalPoints']) s[f] += p[f];
       sides.set(p.side, s);
     }
     return el('div', { class: 'side-cards' }, [...sides.values()].sort((a, b) => b.players - a.players).map(s =>
       el('div', { class: 'side-card', style: `border-top-color:${SIDE_COLORS[s.side] || '#888'}` },
         el('h4', {}, sideDot(s.side), s.side || '—', s.side && s.side === winner ? el('span', { class: 'badge ok' }, t('mission.won')) : null),
         el('dl', {}, [['col.players', s.players], ['col.k', s.kills, 'col.kills'], ['col.d', s.deaths, 'col.deaths'],
-          ['col.teamKills', s.teamKills, 'col.teamKills.title'], ['col.vehicles', s.vehiclesDestroyed, 'col.vehicles.title'], ['col.assists', s.killAssists, 'tile.assists']]
+          ['col.teamKills', s.teamKills, 'col.teamKills.title'], ['col.vehicles', s.vehiclesDestroyed, 'col.vehicles.title'], ['col.assists', s.killAssists, 'tile.assists'],
+          ['col.medical', fmtPoints(s.medicalPoints), 'tile.medical']]
           .map(([label, value, title]) => el('div', {}, el('dt', { title: title ? t(title) : null }, t(label)), el('dd', {}, value)))))));
   }
 
@@ -943,7 +955,7 @@ class StatsApp {
 
   headerLabels(squads) {
     return [...['col.rank', squads ? 'col.squad' : 'col.name', squads ? 'col.players' : 'col.squad', 'col.kills', 'col.deaths',
-      'col.teamKills', 'col.attendance', 'col.accuracy', 'col.vehicles', 'col.assists', 'col.kd'].map(k => t(k)),
+      'col.teamKills', 'col.attendance', 'col.accuracy', 'col.vehicles', 'col.assists', 'col.medical', 'col.kd'].map(k => t(k)),
     ...this.columns(squads).map(c => c.name)];
   }
 
@@ -952,10 +964,10 @@ class StatsApp {
     const squads = this.viewMode === 'squads';
     const custom = (x) => this.columns(squads).map(c => (x.custom && x.custom[c.id] !== null && x.custom[c.id] !== undefined ? x.custom[c.id] : ''));
     const rows = this.items().map((x, i) => squads
-      ? [i + 1, x.name || t('noSquad'), x.players, x.kills, x.deaths, x.teamKills, x.avgAttendance, x.accuracy, x.vehiclesDestroyed, x.killAssists, x.kd, ...custom(x)]
-      : [i + 1, x.name, x.squadRaw || '-', x.kills, x.deaths, x.teamKills, x.attendance, x.accuracy, x.vehiclesDestroyed, x.killAssists, x.kd, ...custom(x)]);
+      ? [i + 1, x.name || t('noSquad'), x.players, x.kills, x.deaths, x.teamKills, x.avgAttendance, x.accuracy, x.vehiclesDestroyed, x.killAssists, x.medicalPoints, x.kd, ...custom(x)]
+      : [i + 1, x.name, x.squadRaw || '-', x.kills, x.deaths, x.teamKills, x.attendance, x.accuracy, x.vehiclesDestroyed, x.killAssists, x.medicalPoints, x.kd, ...custom(x)]);
     const sheet = t(squads ? 'xls.squads' : 'xls.players');
-    const blob = window.xlsx.workbook(sheet, this.headerLabels(squads), rows, [5, 22, 14, 10, 10, 8, 13, 13, 8, 8, 8]);
+    const blob = window.xlsx.workbook(sheet, this.headerLabels(squads), rows, [5, 22, 14, 10, 10, 8, 13, 13, 8, 8, 8, 8]);
     const url = URL.createObjectURL(blob);
     const a = el('a', { href: url, download: `${sheet}_${this.periodText().replace(/[^\d-]+/g, '_')}.xlsx` });
     document.body.append(a);

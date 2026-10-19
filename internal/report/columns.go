@@ -22,8 +22,8 @@ const (
 
 // Sort fields accepted for players and squads, besides "custom.<column id>".
 var (
-	PlayerSortFields = []string{"kills", "deaths", "teamKills", "vehiclesDestroyed", "killAssists", "attendance", "accuracy", "kd", "shotsFired", "hits", "name", "squad"}
-	SquadSortFields  = []string{"kills", "deaths", "teamKills", "vehiclesDestroyed", "killAssists", "attendance", "players", "accuracy", "kd", "score", "name"}
+	PlayerSortFields = []string{"kills", "deaths", "teamKills", "vehiclesDestroyed", "killAssists", "attendance", "accuracy", "kd", "shotsFired", "hits", "treatments", "revives", "medicalPoints", "name", "squad"}
+	SquadSortFields  = []string{"kills", "deaths", "teamKills", "vehiclesDestroyed", "killAssists", "attendance", "players", "accuracy", "kd", "score", "treatments", "revives", "medicalPoints", "name"}
 )
 
 // MaxColumns limits how many custom columns can be defined.
@@ -46,7 +46,7 @@ type Column struct {
 var Variables = []string{
 	"kills", "deaths", "teamkills", "vehiclesdestroyed", "killassists", "shotsfired", "hits",
 	"accuracy", "kd", "attendance", "players", "squadmissions",
-	"maxattendance", "missions", "issquad",
+	"maxattendance", "missions", "issquad", "treatments", "revives", "medicalpoints",
 }
 
 var columnIDRe = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
@@ -118,6 +118,7 @@ func (r *Result) playerVars(p *Player, maxAtt float64) map[string]float64 {
 		"shotsfired": float64(p.ShotsFired), "hits": float64(p.Hits), "accuracy": p.Accuracy, "kd": p.KD,
 		"attendance": float64(p.Attendance), "players": 1, "squadmissions": float64(p.Attendance),
 		"maxattendance": maxAtt, "missions": float64(len(r.Missions)), "issquad": 0,
+		"treatments": float64(p.Treatments), "revives": float64(p.Revives), "medicalpoints": p.MedicalPoints,
 	}
 }
 
@@ -128,6 +129,7 @@ func (r *Result) squadVars(s *Squad, maxAtt float64) map[string]float64 {
 		"shotsfired": float64(s.ShotsFired), "hits": float64(s.Hits), "accuracy": s.Accuracy, "kd": s.KD,
 		"attendance": s.AvgAttendance, "players": float64(s.Players), "squadmissions": float64(s.Missions),
 		"maxattendance": maxAtt, "missions": float64(len(r.Missions)), "issquad": 1,
+		"treatments": float64(s.Treatments), "revives": float64(s.Revives), "medicalpoints": s.MedicalPoints,
 	}
 }
 

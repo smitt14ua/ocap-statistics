@@ -1,5 +1,5 @@
 // Package digest extracts the small part of an OCAP recording that statistics need
-// (entities, kills, hits, mission end) from the full recording JSON.
+// (entities, kills, hits, mission end, medical treatments) from the full recording JSON.
 //
 // A digest is a few hundred KB instead of tens of MB, so it is stored next to the
 // computed statistics: when the statistics rules change, everything is recomputed
@@ -20,8 +20,9 @@ import (
 )
 
 // Version changes when the digest format or extraction changes; old digests are then refetched.
-// Version 2 added vehicle crews and the alternative event layout.
-const Version = 2
+// Version 2 added vehicle crews and the alternative event layout; version 3 added Steam ids,
+// medical treatments and unconsciousness.
+const Version = 3
 
 type Digest struct {
 	Version       int      `json:"v"`
@@ -38,6 +39,10 @@ type Digest struct {
 	Kills         []Kill   `json:"kills"`
 	Hits          []Hit    `json:"hits"`
 	End           *End     `json:"end,omitempty"`
+	// Treatments are medical actions on players, in recording order.
+	Treatments []Treatment `json:"treatments,omitempty"`
+	// Unconscious are the moments units fell unconscious or woke up, in recording order.
+	Unconscious []Consciousness `json:"unconscious,omitempty"`
 }
 
 type Entity struct {
@@ -50,8 +55,27 @@ type Entity struct {
 	Role     string `json:"role,omitempty"`
 	IsPlayer bool   `json:"isPlayer,omitempty"`
 	Shots    int    `json:"shots,omitempty"`
+	// SteamID is the player's Steam id (playerUid), when the recording has it.
+	SteamID string `json:"steamId,omitempty"`
 	// Crew is the crew of a vehicle over time.
 	Crew []CrewSpan `json:"crew,omitempty"`
+}
+
+// Treatment is one entry of the ACE medical activity log of a player: Medic did Action to
+// Patient. Frame is the frame of the snapshot that first contained the entry, so it can be
+// later than the treatment itself. Medic is -1 when the name in the log matches no entity.
+type Treatment struct {
+	Frame   int    `json:"f"`
+	Patient int    `json:"p"`
+	Medic   int    `json:"m"`
+	Action  string `json:"a,omitempty"`
+}
+
+// Consciousness is a unit falling unconscious (Down) or waking up.
+type Consciousness struct {
+	Frame int  `json:"f"`
+	Unit  int  `json:"u"`
+	Down  bool `json:"d,omitempty"`
 }
 
 // CrewSpan is a vehicle crew (entity ids) between two frames, inclusive.
@@ -115,6 +139,7 @@ func Parse(r io.Reader) (*Digest, error) {
 		return nil, err
 	}
 	d := &Digest{Version: Version, MinFrame: math.MaxInt, MaxFrame: math.MinInt}
+	st := &parseState{activity: map[int][]activityEntry{}, steamIDs: map[int]string{}}
 	for dec.More() {
 		tok, err := dec.Token()
 		if err != nil {
@@ -153,7 +178,7 @@ func Parse(r io.Reader) (*Digest, error) {
 				if err := dec.Decode(&ev); err != nil {
 					return err
 				}
-				d.addEvent(ev)
+				d.addEvent(ev, st)
 				return nil
 			})
 		default:
@@ -166,10 +191,103 @@ func Parse(r io.Reader) (*Digest, error) {
 	if d.EventCount == 0 {
 		d.MinFrame, d.MaxFrame = 0, 0
 	}
+	d.finish(st)
 	return d, nil
 }
 
-func (d *Digest) addEvent(ev []json.RawMessage) {
+// parseState is what Parse keeps between events.
+type parseState struct {
+	// activity is the last seen medical activity log of each unit.
+	activity map[int][]activityEntry
+	// medics are the medic names of d.Treatments, resolved to entities by finish.
+	medics   []string
+	steamIDs map[int]string
+}
+
+type activityEntry struct {
+	Text string `json:"text"`
+	Time string `json:"time"`
+}
+
+// finish resolves what needs all entities: Steam ids and the medics of treatments.
+func (d *Digest) finish(st *parseState) {
+	for i := range d.Entities {
+		if e := &d.Entities[i]; e.SteamID == "" {
+			e.SteamID = st.steamIDs[e.ID]
+		}
+	}
+	// A log entry starts with the medic's name. The longest matching name wins ("[A] Bob" over
+	// "Bob"), and players win over AI with the same name.
+	byName := map[string]*Entity{}
+	for i := range d.Entities {
+		e := &d.Entities[i]
+		if old := byName[e.Name]; e.Type != "vehicle" && e.Name != "" && (old == nil || (e.IsPlayer && !old.IsPlayer)) {
+			byName[e.Name] = e
+		}
+	}
+	for i := range d.Treatments {
+		t := &d.Treatments[i]
+		text, best := st.medics[i], ""
+		for name, e := range byName {
+			if len(name) > len(best) && strings.HasPrefix(text, name+" ") {
+				best, t.Medic = name, e.ID
+			}
+		}
+		t.Action = strings.TrimSpace(text[len(best):])
+	}
+}
+
+// eventPayload decodes the object argument of an event, also when it is written as a JSON
+// string.
+func eventPayload(raw json.RawMessage, v any) bool {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		raw = json.RawMessage(s)
+	}
+	return len(raw) > 0 && raw[0] == '{' && json.Unmarshal(raw, v) == nil
+}
+
+// medicalSnapshot reads the activity log of a "medicalSnapshot" event. A snapshot is either
+// complete or a change ("diffOf" an earlier one, with the changed fields under "set"). ACE
+// keeps only the last entries of the log, so new entries are those after the longest overlap
+// with the previous log; when more entries were added between two snapshots than the log
+// holds, the missing ones are lost.
+func (d *Digest) medicalSnapshot(frame int, raw json.RawMessage, st *parseState) {
+	type fields struct {
+		Activity *[]activityEntry `json:"activity"`
+	}
+	var p struct {
+		UnitID *int    `json:"unitId"`
+		Set    *fields `json:"set"`
+		fields
+	}
+	if !eventPayload(raw, &p) || p.UnitID == nil {
+		return
+	}
+	log := p.Activity
+	if p.Set != nil {
+		log = p.Set.Activity
+	}
+	if log == nil {
+		return // unchanged
+	}
+	unit, cur := *p.UnitID, *log
+	prev := st.activity[unit]
+	overlap := 0
+	for n := min(len(prev), len(cur)); n > 0; n-- {
+		if slices.Equal(prev[len(prev)-n:], cur[:n]) {
+			overlap = n
+			break
+		}
+	}
+	for _, a := range cur[overlap:] {
+		d.Treatments = append(d.Treatments, Treatment{Frame: frame, Patient: unit, Medic: -1})
+		st.medics = append(st.medics, strings.TrimSpace(a.Text))
+	}
+	st.activity[unit] = cur
+}
+
+func (d *Digest) addEvent(ev []json.RawMessage, st *parseState) {
 	if len(ev) < 2 {
 		return
 	}
@@ -237,6 +355,33 @@ func (d *Digest) addEvent(ev []json.RawMessage) {
 			end.Message = stringOf(arg(3))
 		}
 		d.End = end
+	case "ace3Unconscious":
+		var p struct {
+			SoldierID     *int `json:"soldierId"`
+			IsUnconscious bool `json:"isUnconscious"`
+		}
+		if eventPayload(arg(2), &p) && p.SoldierID != nil {
+			d.Unconscious = append(d.Unconscious, Consciousness{Frame: f, Unit: *p.SoldierID, Down: p.IsUnconscious})
+		}
+	}
+	// Snapshots of player state carry the player's Steam id.
+	if strings.HasSuffix(typ, "Snapshot") || typ == "zeusEntity" {
+		var p struct {
+			UnitID     *int   `json:"unitId"`
+			BodyUnitID *int   `json:"bodyUnitId"`
+			PlayerUID  string `json:"playerUid"`
+		}
+		if eventPayload(arg(2), &p) && p.PlayerUID != "" {
+			if p.UnitID == nil {
+				p.UnitID = p.BodyUnitID
+			}
+			if p.UnitID != nil {
+				st.steamIDs[*p.UnitID] = p.PlayerUID
+			}
+		}
+		if typ == "medicalSnapshot" {
+			d.medicalSnapshot(f, arg(2), st)
+		}
 	}
 }
 
@@ -269,6 +414,7 @@ type rawEntity struct {
 	FramesFired arrayLen        `json:"framesFired"`
 	Positions   json.RawMessage `json:"positions"`
 	StartFrame  flexNum         `json:"startFrameNum"`
+	PlayerUID   flexStr         `json:"playerUid"`
 }
 
 func (e rawEntity) entity() Entity {
@@ -282,6 +428,7 @@ func (e rawEntity) entity() Entity {
 		Role:     string(e.Role),
 		IsPlayer: e.IsPlayer == 1,
 		Shots:    int(e.FramesFired),
+		SteamID:  string(e.PlayerUID),
 		Crew:     vehicleCrew(string(e.Type), e.Positions, int(e.StartFrame)),
 	}
 }

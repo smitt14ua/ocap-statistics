@@ -2,6 +2,8 @@ package stats
 
 import (
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -121,7 +123,7 @@ func TestCompute(t *testing.T) {
 	smith := got["Smith"]
 	// Two entities merged: kills of AI (110), enemy (120) and team mate (130); Javelin on the tank.
 	want := PlayerRow{Name: "Smith", RawName: "[MILF] Smith", SquadRaw: "MILF", Squad: "MILF", Side: "WEST",
-		Kills: 3, Deaths: 1, TeamKills: 1, VehicleKills: 1, Shots: 5, Hits: 2, KillAssists: 0}
+		Kills: 3, Deaths: 1, TeamKills: 1, VehicleKills: 1, Shots: 5, Hits: 2, KillAssists: 0, SteamID: "76561190000000001"}
 	if smith != want {
 		t.Errorf("Smith = %+v\nwant   %+v", smith, want)
 	}
@@ -129,7 +131,9 @@ func TestCompute(t *testing.T) {
 	rookie := got["Rookie"]
 	// Rookie sat in Smith's tank when Smith killed the rifleman (frame 110): one assist. The
 	// team kill of Rookie (130) and the tank kill (170, Rookie no longer aboard) give none.
-	if rookie.SquadRaw != "milf" || rookie.Squad != "milf" || rookie.Deaths != 1 || rookie.Kills != 0 || rookie.KillAssists != 1 {
+	// Rookie bandaged the unconscious Smith, who woke up (175-185): a treatment and a revive.
+	if rookie.SquadRaw != "milf" || rookie.Squad != "milf" || rookie.Deaths != 1 || rookie.Kills != 0 || rookie.KillAssists != 1 ||
+		rookie.Treatments != 1 || rookie.Revives != 1 {
 		t.Errorf("Rookie = %+v", rookie)
 	}
 	wantAssist := AssistRow{Frame: 110, Player: "Rookie", PlayerSquad: "milf", Kind: AssistCrew, Killer: "Smith", Victim: "Rifleman", VictimKind: VictimAI}
@@ -359,5 +363,78 @@ func TestCustomNickname(t *testing.T) {
 		if _, err := NewRules(bad, DefaultAssists()); err == nil {
 			t.Errorf("NewRules(%+v) accepted an invalid format", bad)
 		}
+	}
+}
+
+// Medical snapshots carry the patient's ACE activity log, which keeps only its last entries;
+// treatments are the entries new since the previous snapshot.
+func TestMedical(t *testing.T) {
+	entry := func(text string) string { return `{"text": "` + text + `", "time": "10:00"}` }
+	tourniquet, self := entry("[A] Medic applied a tourniquet"), entry("[A] Patient has bandaged patient")
+	other, iv := entry("[B] Other перев'язав пацієнта"), entry("[A] Medic has given an IV")
+	morphine, unknown, bandage := entry("[A] Medic used Morphine"), entry("Stranger did something"), entry("[A] Medic has bandaged patient")
+	d, err := digest.Parse(strings.NewReader(`{"captureDelay": 1, "entities": [
+		{"id": 0, "name": "[A] Medic", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 1, "name": "[A] Patient", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 2, "name": "[A]", "side": "WEST", "isPlayer": 0, "type": "unit"},
+		{"id": 3, "name": "[B] Other", "side": "WEST", "isPlayer": 1, "type": "unit"},
+		{"id": 4, "name": "Rifleman", "side": "EAST", "isPlayer": 0, "type": "unit"}
+	], "events": [
+		[1, "medicalSnapshot", {"unitId": 1, "playerUid": "765611", "reason": "periodic", "activity": []}],
+		[2, "radioSnapshot", {"unitId": 0, "playerUid": "765610", "radios": []}],
+		[10, "ace3Unconscious", {"SoldierID": 1, "IsUnconscious": true}],
+		[20, "medicalSnapshot", {"diffOf": 1, "unitId": 1, "set": {"activity": [` + tourniquet + `, ` + self + `]}}],
+		[30, "medicalSnapshot", {"diffOf": 20, "unitId": 1, "set": {"ace": {"pain": 0}}}],
+		[40, "medicalSnapshot", ` + strconv.Quote(`{"diffOf": 20, "unitId": 1, "set": {"activity": [`+tourniquet+`, `+self+`, `+other+`]}}`) + `],
+		[50, "ace3Unconscious", {"SoldierID": 1, "IsUnconscious": false}],
+		[55, "medicalSnapshot", {"unitId": 1, "activity": [` + self + `, ` + other + `, ` + iv + `]}],
+		[100, "ace3Unconscious", {"SoldierID": 1, "IsUnconscious": true}],
+		[105, "medicalSnapshot", {"diffOf": 55, "unitId": 1, "set": {"activity": [` + other + `, ` + iv + `, ` + morphine + `, ` + unknown + `]}}],
+		[110, "killed", 1, [4, "AK-74"], 50],
+		[120, "ace3Unconscious", {"SoldierID": 1, "IsUnconscious": false}],
+		[200, "ace3Unconscious", {"SoldierID": 1, "IsUnconscious": true}],
+		[205, "ace3Unconscious", {"SoldierID": 1, "IsUnconscious": false}],
+		[210, "medicalSnapshot", {"diffOf": 105, "unitId": 1, "set": {"activity": [` + iv + `, ` + morphine + `, ` + unknown + `, ` + bandage + `]}}]
+	]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type tr struct {
+		frame, medic int
+		action       string
+	}
+	var got []tr
+	for _, x := range d.Treatments {
+		if x.Patient != 1 {
+			t.Errorf("patient of %+v", x)
+		}
+		got = append(got, tr{x.Frame, x.Medic, x.Action})
+	}
+	want := []tr{
+		{20, 0, "applied a tourniquet"}, {20, 1, "has bandaged patient"}, {40, 3, "перев'язав пацієнта"}, {55, 0, "has given an IV"},
+		{105, 0, "used Morphine"}, {105, -1, "Stranger did something"}, {210, 0, "has bandaged patient"},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("treatments:\n got %v\nwant %v", got, want)
+	}
+	if len(d.Unconscious) != 6 || !d.Unconscious[0].Down || d.Unconscious[1].Down {
+		t.Errorf("unconscious: %+v", d.Unconscious)
+	}
+
+	res := Compute(d, DefaultRules())
+	rows := map[string]PlayerRow{}
+	for _, p := range res.Players {
+		rows[p.Name] = p
+	}
+	// Medic: tourniquet, IV, morphine and bandage; the revive at 205 (treated right after it).
+	// Other: the revive at 50 (the last medic before it). The wake-up at 120 follows a death.
+	if m := rows["Medic"]; m.Treatments != 4 || m.Revives != 1 || m.SteamID != "765610" {
+		t.Errorf("Medic = %+v", m)
+	}
+	if o := rows["Other"]; o.Treatments != 1 || o.Revives != 1 || o.SteamID != "" {
+		t.Errorf("Other = %+v", o)
+	}
+	if p := rows["Patient"]; p.Treatments != 0 || p.Revives != 0 || p.SteamID != "765611" {
+		t.Errorf("Patient = %+v (treating oneself does not count)", p)
 	}
 }

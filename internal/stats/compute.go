@@ -19,8 +19,9 @@ import (
 // ComputeVersion changes whenever the per-mission rules below change. Stored missions computed
 // with another version or nickname format are recomputed from their digests.
 // Version 3 added kill assists for hits; version 4 records who got each assist; version 5
-// credits deaths without a killer to the enemy who damaged the victim last.
-const ComputeVersion = 5
+// credits deaths without a killer to the enemy who damaged the victim last; version 6 adds
+// treatments, revives and Steam ids.
+const ComputeVersion = 6
 
 // Victim kinds stored with kills.
 const (
@@ -45,6 +46,12 @@ type PlayerRow struct {
 	KillAssists int `json:"killAssists"`
 	Shots       int `json:"shotsFired"`
 	Hits        int `json:"hits"`
+	// Treatments counts medical actions on other players; Revives counts unconscious players
+	// who woke up after the player treated them (see Compute).
+	Treatments int `json:"treatments"`
+	Revives    int `json:"revives"`
+	// SteamID is not published: it identifies players for a future sign-in.
+	SteamID string `json:"-"`
 }
 
 // KillRow is a kill where the killer or the victim is a player.
@@ -134,6 +141,36 @@ type Assists struct {
 // DefaultAssists counts hits within five minutes before a death.
 func DefaultAssists() Assists {
 	return Assists{Hits: true, Window: 300}
+}
+
+// Medical weighs treatments and revives into medical points. It is editable in the admin panel
+// and applied when statistics are aggregated, so changing it needs no recompute.
+type Medical struct {
+	Treatment float64 `json:"treatment"`
+	Revive    float64 `json:"revive"`
+}
+
+// DefaultMedical gives a point per treatment and five per revive.
+func DefaultMedical() Medical {
+	return Medical{Treatment: 1, Revive: 5}
+}
+
+// MaxMedicalWeight bounds the Medical weights.
+const MaxMedicalWeight = 1000
+
+// Validate checks the weights.
+func (m Medical) Validate() error {
+	for _, w := range []float64{m.Treatment, m.Revive} {
+		if math.IsNaN(w) || w < 0 || w > MaxMedicalWeight {
+			return fmt.Errorf("medical: weights must be between 0 and %d", MaxMedicalWeight)
+		}
+	}
+	return nil
+}
+
+// Points returns the medical points for treatment and revive counts, rounded to hundredths.
+func (m Medical) Points(treatments, revives int) float64 {
+	return math.Round((float64(treatments)*m.Treatment+float64(revives)*m.Revive)*100) / 100
 }
 
 // MaxAssistWindow is the largest allowed Assists.Window (seconds).
@@ -324,7 +361,12 @@ func noKiller(k digest.Kill, entities map[int]*digest.Entity) bool {
 //     its vehicle) within Assists.Window seconds before it and after its previous death, when
 //     Assists.Hits is on; at most one
 //     assist per death, and never for the player's own kill. Every assist is also listed in
-//     MissionResult.Assists with the death it was given for.
+//     MissionResult.Assists with the death it was given for;
+//   - treatment: an entry of a player's ACE medical activity log written by another player
+//     (bandage, tourniquet, splint, medication, IV, CPR, ...); treating oneself does not count;
+//   - revive: an unconscious player woke up without dying in between, after another player
+//     treated them; it goes to the last such medic before the wake-up (or, when the log shows
+//     the treatment only in the next snapshot, the first one within reviveGrace after it).
 func Compute(d *digest.Digest, rules *Rules) MissionResult {
 	res := MissionResult{Duration: d.Duration()}
 	if d.End != nil {
@@ -357,6 +399,9 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 		row := &res.Players[idx]
 		if row.Squad == "" && squad != "" {
 			row.SquadRaw, row.Squad = squadRaw, squad
+		}
+		if row.SteamID == "" {
+			row.SteamID = e.SteamID
 		}
 		row.Shots += e.Shots
 	}
@@ -521,5 +566,67 @@ func Compute(d *digest.Digest, rules *Rules) MissionResult {
 			shooter.Hits++
 		}
 	}
+	countMedical(d, playerOf, int(math.Ceil(reviveGrace/delay)))
 	return res
+}
+
+// reviveGrace (seconds): treatments seen this long after a player woke up may still have
+// been done before, as medical snapshots are written every few seconds.
+const reviveGrace = 15
+
+// countMedical counts treatments and revives (see Compute). graceFrames is reviveGrace in
+// frames.
+func countMedical(d *digest.Digest, playerOf map[int]*PlayerRow, graceFrames int) {
+	// medic returns the player who treated someone else, or nil.
+	medic := func(t digest.Treatment) *PlayerRow {
+		m := playerOf[t.Medic]
+		if m == nil || t.Medic == t.Patient || m == playerOf[t.Patient] {
+			return nil
+		}
+		return m
+	}
+	for _, t := range d.Treatments {
+		if m := medic(t); m != nil {
+			m.Treatments++
+		}
+	}
+
+	died := map[int][]int{} // unit -> frames of its deaths
+	for _, k := range d.Kills {
+		died[k.Victim] = append(died[k.Victim], k.Frame)
+	}
+	down := map[int]int{} // unit -> frame it fell unconscious
+	for _, c := range d.Unconscious {
+		from, wasDown := down[c.Unit]
+		if c.Down {
+			if !wasDown {
+				down[c.Unit] = c.Frame
+			}
+			continue
+		}
+		delete(down, c.Unit)
+		if !wasDown || slices.ContainsFunc(died[c.Unit], func(f int) bool { return f > from && f <= c.Frame }) {
+			continue
+		}
+		// The last medic seen before the wake-up, else the first one seen right after it.
+		var last, after *PlayerRow
+		for _, t := range d.Treatments {
+			if t.Patient != c.Unit || t.Frame <= from || t.Frame > c.Frame+graceFrames {
+				continue
+			}
+			if m := medic(t); m != nil {
+				if t.Frame <= c.Frame {
+					last = m
+				} else if after == nil {
+					after = m
+				}
+			}
+		}
+		if last == nil {
+			last = after
+		}
+		if last != nil {
+			last.Revives++
+		}
+	}
 }
