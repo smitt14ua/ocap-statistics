@@ -14,9 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # check-latest: go.mod names only the minor version, and the runner's cached Go
+      # may lag behind a security release that govulncheck already reports.
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          check-latest: true
       - run: go vet ./...
       - run: go test -race ./...
       - run: make check-web
@@ -41,6 +44,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: false
       - uses: actions/cache@v4
         with:
