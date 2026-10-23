@@ -38,6 +38,7 @@ type Settings struct {
 	MinMissions int             `json:"minMissions"`
 	Nickname    stats.Nickname  `json:"nickname"`
 	Assists     stats.Assists   `json:"assists"`
+	Medical     stats.Medical   `json:"medical"`
 	Rotation    config.Rotation `json:"rotation"`
 	// Columns are custom statistics columns defined in the admin panel.
 	Columns []report.Column `json:"columns"`
@@ -101,6 +102,7 @@ func FromConfig(cfg config.Config) Settings {
 			IgnoreNames:  slices.Clone(cfg.Stats.IgnoreNames),
 		},
 		Assists:  cfg.Stats.Assists,
+		Medical:  cfg.Stats.Medical,
 		Rotation: cfg.Rotation,
 		Sort:     DefaultSort{Players: defaultSortOrder, Squads: defaultSortOrder},
 	}
@@ -126,6 +128,9 @@ func (s *Settings) Normalize() (*stats.Rules, error) {
 	}
 	rules, err := stats.NewRules(s.Nickname, s.Assists)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.Medical.Validate(); err != nil {
 		return nil, err
 	}
 	if s.Columns, err = report.NormalizeColumns(s.Columns); err != nil {

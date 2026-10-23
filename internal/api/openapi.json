@@ -122,7 +122,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, accuracy, kd, shotsFired, hits, name, squad or custom.<column id>. Without it the default sort configured by the administrator is used (see /api/v1/config)."
+            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, accuracy, kd, shotsFired, hits, treatments, revives, medicalPoints, name, squad or custom.<column id>. Without it the default sort configured by the administrator is used (see /api/v1/config)."
           },
           {
             "$ref": "#/components/parameters/order"
@@ -305,7 +305,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, players, accuracy, kd, score, name or custom.<column id>. Without it the default sort configured by the administrator is used (see /api/v1/config)."
+            "description": "kills, deaths, teamKills, vehiclesDestroyed, killAssists, attendance, players, accuracy, kd, score, treatments, revives, medicalPoints, name or custom.<column id>. Without it the default sort configured by the administrator is used (see /api/v1/config)."
           },
           {
             "$ref": "#/components/parameters/order"
@@ -885,6 +885,15 @@
           },
           "killAssists": {
             "type": "integer"
+          },
+          "treatments": {
+            "type": "integer"
+          },
+          "revives": {
+            "type": "integer"
+          },
+          "medicalPoints": {
+            "type": "number"
           }
         }
       },
@@ -1029,6 +1038,15 @@
             "type": "integer",
             "description": "Kills made by another crew member of the vehicle the player was in, and deaths of enemies the player hit shortly before (see the README)"
           },
+          "treatments": {
+            "$ref": "#/components/schemas/Treatments"
+          },
+          "revives": {
+            "$ref": "#/components/schemas/Revives"
+          },
+          "medicalPoints": {
+            "$ref": "#/components/schemas/MedicalPoints"
+          },
           "custom": {
             "type": "object",
             "additionalProperties": {
@@ -1092,6 +1110,15 @@
             "type": "integer",
             "description": "Kills made by another crew member of the vehicle the player was in, and deaths of enemies the player hit shortly before (see the README)"
           },
+          "treatments": {
+            "$ref": "#/components/schemas/Treatments"
+          },
+          "revives": {
+            "$ref": "#/components/schemas/Revives"
+          },
+          "medicalPoints": {
+            "$ref": "#/components/schemas/MedicalPoints"
+          },
           "custom": {
             "type": "object",
             "additionalProperties": {
@@ -1133,6 +1160,9 @@
             "$ref": "#/components/schemas/PlayerAward"
           },
           "topVehicles": {
+            "$ref": "#/components/schemas/PlayerAward"
+          },
+          "topMedic": {
             "$ref": "#/components/schemas/PlayerAward"
           },
           "topSquad": {
@@ -1306,8 +1336,29 @@
           },
           "killAssists": {
             "type": "integer"
+          },
+          "treatments": {
+            "$ref": "#/components/schemas/Treatments"
+          },
+          "revives": {
+            "$ref": "#/components/schemas/Revives"
+          },
+          "medicalPoints": {
+            "$ref": "#/components/schemas/MedicalPoints"
           }
         }
+      },
+      "Treatments": {
+        "type": "integer",
+        "description": "Medical actions on other players (bandages, tourniquets, medication, IVs, ...) from the ACE activity logs in the recording"
+      },
+      "Revives": {
+        "type": "integer",
+        "description": "Unconscious players who woke up after this player treated them last (see the README)"
+      },
+      "MedicalPoints": {
+        "type": "number",
+        "description": "treatments and revives weighed by the medical settings of the administrator"
       },
       "PlayerMission": {
         "allOf": [

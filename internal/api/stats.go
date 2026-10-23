@@ -80,7 +80,7 @@ func (s *Server) report(ctx context.Context, f store.Filter) (built, error) {
 			return built{}, err
 		}
 		set := s.settings.Get()
-		res := report.Build(missions, rows)
+		res := report.Build(missions, rows, set.Medical)
 		res.ApplyColumns(set.Columns)
 		res.Hide(set.MinMissions)
 		return built{res: res, longest: longest}, nil
@@ -319,7 +319,8 @@ func (s *Server) mission(r *http.Request) (response, error) {
 	if err != nil {
 		return response{}, err
 	}
-	res := report.Build([]store.Mission{m}, rows)
+	med := s.settings.Get().Medical
+	res := report.Build([]store.Mission{m}, rows, med)
 	kills, err := s.store.Kills(ctx, store.Filter{}, store.KillQuery{MissionID: id})
 	if err != nil {
 		return response{}, err
@@ -329,17 +330,20 @@ func (s *Server) mission(r *http.Request) (response, error) {
 		return response{}, err
 	}
 	type missionPlayer struct {
-		Name              string `json:"name"`
-		Squad             string `json:"squad"`
-		SquadRaw          string `json:"squadRaw"`
-		Side              string `json:"side"`
-		Kills             int    `json:"kills"`
-		Deaths            int    `json:"deaths"`
-		TeamKills         int    `json:"teamKills"`
-		VehiclesDestroyed int    `json:"vehiclesDestroyed"`
-		KillAssists       int    `json:"killAssists"`
-		ShotsFired        int    `json:"shotsFired"`
-		Hits              int    `json:"hits"`
+		Name              string  `json:"name"`
+		Squad             string  `json:"squad"`
+		SquadRaw          string  `json:"squadRaw"`
+		Side              string  `json:"side"`
+		Kills             int     `json:"kills"`
+		Deaths            int     `json:"deaths"`
+		TeamKills         int     `json:"teamKills"`
+		VehiclesDestroyed int     `json:"vehiclesDestroyed"`
+		KillAssists       int     `json:"killAssists"`
+		ShotsFired        int     `json:"shotsFired"`
+		Hits              int     `json:"hits"`
+		Treatments        int     `json:"treatments"`
+		Revives           int     `json:"revives"`
+		MedicalPoints     float64 `json:"medicalPoints"`
 	}
 	players := make([]missionPlayer, 0, len(rows))
 	for _, row := range rows {
@@ -347,6 +351,7 @@ func (s *Server) mission(r *http.Request) (response, error) {
 			Name: row.Name, Squad: row.Squad, SquadRaw: row.SquadRaw, Side: row.Side,
 			Kills: row.Kills, Deaths: row.Deaths, TeamKills: row.TeamKills, VehiclesDestroyed: row.VehicleKills,
 			KillAssists: row.KillAssists, ShotsFired: row.Shots, Hits: row.Hits,
+			Treatments: row.Treatments, Revives: row.Revives, MedicalPoints: med.Points(row.Treatments, row.Revives),
 		})
 	}
 	return jsonResponse(map[string]any{
@@ -385,9 +390,11 @@ func (s *Server) players(r *http.Request) (response, error) {
 		rows := make([][]string, 0, len(list))
 		for i, pl := range list {
 			rows = append(rows, []string{fi(p.offset + i + 1), pl.Name, pl.SquadRaw, fi(pl.Kills), fi(pl.Deaths), fi(pl.TeamKills),
-				fi(pl.Attendance), ff(pl.Accuracy), fi(pl.VehiclesDestroyed), fi(pl.KillAssists), ff(pl.KD)})
+				fi(pl.Attendance), ff(pl.Accuracy), fi(pl.VehiclesDestroyed), fi(pl.KillAssists), ff(pl.KD),
+				fi(pl.Treatments), fi(pl.Revives), ff(pl.MedicalPoints)})
 		}
-		header := []string{"rank", "name", "squad", "kills", "deaths", "team_kills", "attendance", "accuracy", "vehicles_destroyed", "kill_assists", "kd"}
+		header := []string{"rank", "name", "squad", "kills", "deaths", "team_kills", "attendance", "accuracy", "vehicles_destroyed", "kill_assists", "kd",
+			"treatments", "revives", "medical_points"}
 		header, rows = s.withCustomCSV(header, rows, report.TargetSquads, func(i int) map[string]*float64 { return list[i].Custom })
 		return csvResponse("players.csv", header, rows)
 	}
@@ -395,21 +402,24 @@ func (s *Server) players(r *http.Request) (response, error) {
 }
 
 type missionRow struct {
-	MissionID         int64  `json:"missionId"`
-	Filename          string `json:"filename"`
-	Date              string `json:"date"`
-	Name              string `json:"name"`
-	World             string `json:"world"`
-	Squad             string `json:"squad"`
-	SquadRaw          string `json:"squadRaw"`
-	Side              string `json:"side"`
-	Kills             int    `json:"kills"`
-	Deaths            int    `json:"deaths"`
-	TeamKills         int    `json:"teamKills"`
-	VehiclesDestroyed int    `json:"vehiclesDestroyed"`
-	KillAssists       int    `json:"killAssists"`
-	ShotsFired        int    `json:"shotsFired"`
-	Hits              int    `json:"hits"`
+	MissionID         int64   `json:"missionId"`
+	Filename          string  `json:"filename"`
+	Date              string  `json:"date"`
+	Name              string  `json:"name"`
+	World             string  `json:"world"`
+	Squad             string  `json:"squad"`
+	SquadRaw          string  `json:"squadRaw"`
+	Side              string  `json:"side"`
+	Kills             int     `json:"kills"`
+	Deaths            int     `json:"deaths"`
+	TeamKills         int     `json:"teamKills"`
+	VehiclesDestroyed int     `json:"vehiclesDestroyed"`
+	KillAssists       int     `json:"killAssists"`
+	ShotsFired        int     `json:"shotsFired"`
+	Hits              int     `json:"hits"`
+	Treatments        int     `json:"treatments"`
+	Revives           int     `json:"revives"`
+	MedicalPoints     float64 `json:"medicalPoints"`
 }
 
 func (s *Server) player(r *http.Request) (response, error) {
@@ -443,6 +453,7 @@ func (s *Server) player(r *http.Request) (response, error) {
 	}
 	missions := make([]missionRow, 0, len(rows))
 	squadCount := counter{}
+	med := s.settings.Get().Medical
 	for _, row := range slices.Backward(rows) {
 		m := missionByID[row.MissionID]
 		missions = append(missions, missionRow{
@@ -450,6 +461,7 @@ func (s *Server) player(r *http.Request) (response, error) {
 			Squad: res.SquadName(row.Squad), SquadRaw: row.SquadRaw, Side: row.Side,
 			Kills: row.Kills, Deaths: row.Deaths, TeamKills: row.TeamKills, VehiclesDestroyed: row.VehicleKills,
 			KillAssists: row.KillAssists, ShotsFired: row.Shots, Hits: row.Hits,
+			Treatments: row.Treatments, Revives: row.Revives, MedicalPoints: med.Points(row.Treatments, row.Revives),
 		})
 		squadCount.add(res.SquadName(row.Squad))
 	}
@@ -545,9 +557,11 @@ func (s *Server) squads(r *http.Request) (response, error) {
 				name = report.NoSquad
 			}
 			rows = append(rows, []string{fi(p.offset + i + 1), name, fi(sq.Players), fi(sq.Kills), fi(sq.Deaths), fi(sq.TeamKills),
-				ff(sq.AvgAttendance), ff(sq.Accuracy), fi(sq.VehiclesDestroyed), fi(sq.KillAssists), ff(sq.KD)})
+				ff(sq.AvgAttendance), ff(sq.Accuracy), fi(sq.VehiclesDestroyed), fi(sq.KillAssists), ff(sq.KD),
+				fi(sq.Treatments), fi(sq.Revives), ff(sq.MedicalPoints)})
 		}
-		header := []string{"rank", "squad", "players", "kills", "deaths", "team_kills", "avg_attendance", "accuracy", "vehicles_destroyed", "kill_assists", "kd"}
+		header := []string{"rank", "squad", "players", "kills", "deaths", "team_kills", "avg_attendance", "accuracy", "vehicles_destroyed", "kill_assists", "kd",
+			"treatments", "revives", "medical_points"}
 		header, rows = s.withCustomCSV(header, rows, report.TargetPlayers, func(i int) map[string]*float64 { return list[i].Custom })
 		return csvResponse("squads.csv", header, rows)
 	}

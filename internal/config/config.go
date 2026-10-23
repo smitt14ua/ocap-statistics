@@ -121,6 +121,8 @@ type Stats struct {
 	IgnoreNames []string `json:"ignoreNames"`
 	// Assists configures kill assists for hitting an enemy shortly before its death.
 	Assists stats.Assists `json:"assists"`
+	// Medical weighs treatments and revives into medical points.
+	Medical stats.Medical `json:"medical"`
 }
 
 type Rotation struct {
@@ -164,6 +166,7 @@ func Default() Config {
 			MinDuration:  1200,
 			SquadPattern: stats.DefaultSquadPattern,
 			Assists:      stats.DefaultAssists(),
+			Medical:      stats.DefaultMedical(),
 		},
 		UI: UI{
 			Title: "OCAP Statistics",

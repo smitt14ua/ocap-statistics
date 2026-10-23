@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS mission_players (
 	kill_assists  INTEGER NOT NULL DEFAULT 0,
 	shots         INTEGER NOT NULL,
 	hits          INTEGER NOT NULL,
+	treatments    INTEGER NOT NULL DEFAULT 0,
+	revives       INTEGER NOT NULL DEFAULT 0,
+	steam_id      TEXT    NOT NULL DEFAULT '', -- never published
 	PRIMARY KEY (mission_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_mp_name ON mission_players(name);
@@ -169,6 +172,10 @@ func migrate(db *sql.DB) error {
 		{"missions", "capture_delay", "REAL NOT NULL DEFAULT 1"},
 		// Filled when ComputeVersion 5 recomputes the missions.
 		{"kills", "cause", "TEXT NOT NULL DEFAULT ''"},
+		// Filled from digests of version 3 (recordings are read again).
+		{"mission_players", "treatments", "INTEGER NOT NULL DEFAULT 0"},
+		{"mission_players", "revives", "INTEGER NOT NULL DEFAULT 0"},
+		{"mission_players", "steam_id", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		var n int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&n); err != nil {
@@ -384,15 +391,17 @@ func writeResult(ctx context.Context, tx *sql.Tx, id int64, computeKey string, r
 		return err
 	}
 	pst, err := tx.PrepareContext(ctx, `INSERT INTO mission_players
-		(mission_id, name, raw_name, squad_raw, squad, side, kills, deaths, team_kills, vehicle_kills, kill_assists, shots, hits)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(mission_id, name, raw_name, squad_raw, squad, side, kills, deaths, team_kills, vehicle_kills, kill_assists, shots, hits,
+		 treatments, revives, steam_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer pst.Close()
 	for _, p := range res.Players {
 		if _, err := pst.ExecContext(ctx, id, p.Name, p.RawName, p.SquadRaw, p.Squad, p.Side,
-			p.Kills, p.Deaths, p.TeamKills, p.VehicleKills, p.KillAssists, p.Shots, p.Hits); err != nil {
+			p.Kills, p.Deaths, p.TeamKills, p.VehicleKills, p.KillAssists, p.Shots, p.Hits,
+			p.Treatments, p.Revives, p.SteamID); err != nil {
 			return err
 		}
 	}
@@ -620,8 +629,7 @@ func (s *Store) Rows(ctx context.Context, f Filter, name string) ([]Row, error) 
 		where += " AND p.name = ?"
 		args = append(args, name)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT p.mission_id, m.date, p.name, p.raw_name, p.squad_raw, p.squad, p.side,
-		p.kills, p.deaths, p.team_kills, p.vehicle_kills, p.kill_assists, p.shots, p.hits
+	rows, err := s.db.QueryContext(ctx, `SELECT `+rowCols+`
 		FROM mission_players p JOIN missions m ON m.id = p.mission_id
 		WHERE `+where+` ORDER BY m.date, m.id`, args...)
 	if err != nil {
@@ -630,13 +638,17 @@ func (s *Store) Rows(ctx context.Context, f Filter, name string) ([]Row, error) 
 	return scanRows(rows)
 }
 
+const rowCols = `p.mission_id, m.date, p.name, p.raw_name, p.squad_raw, p.squad, p.side,
+		p.kills, p.deaths, p.team_kills, p.vehicle_kills, p.kill_assists, p.shots, p.hits, p.treatments, p.revives, p.steam_id`
+
 func scanRows(rows *sql.Rows) ([]Row, error) {
 	defer rows.Close()
 	var out []Row
 	for rows.Next() {
 		var r Row
 		if err := rows.Scan(&r.MissionID, &r.Date, &r.Name, &r.RawName, &r.SquadRaw, &r.Squad, &r.Side,
-			&r.Kills, &r.Deaths, &r.TeamKills, &r.VehicleKills, &r.KillAssists, &r.Shots, &r.Hits); err != nil {
+			&r.Kills, &r.Deaths, &r.TeamKills, &r.VehicleKills, &r.KillAssists, &r.Shots, &r.Hits,
+			&r.Treatments, &r.Revives, &r.SteamID); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -646,8 +658,7 @@ func scanRows(rows *sql.Rows) ([]Row, error) {
 
 // MissionRows returns the player rows of one mission.
 func (s *Store) MissionRows(ctx context.Context, id int64) ([]Row, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT p.mission_id, m.date, p.name, p.raw_name, p.squad_raw, p.squad, p.side,
-		p.kills, p.deaths, p.team_kills, p.vehicle_kills, p.kill_assists, p.shots, p.hits
+	rows, err := s.db.QueryContext(ctx, `SELECT `+rowCols+`
 		FROM mission_players p JOIN missions m ON m.id = p.mission_id
 		WHERE p.mission_id = ? ORDER BY p.name`, id)
 	if err != nil {

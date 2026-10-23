@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/smitt14ua/ocap-statistics/internal/config"
+	"github.com/smitt14ua/ocap-statistics/internal/stats"
 	"github.com/smitt14ua/ocap-statistics/internal/store"
 )
 
@@ -26,6 +27,9 @@ type Player struct {
 	KillAssists       int     `json:"killAssists"`
 	ShotsFired        int     `json:"shotsFired"`
 	Hits              int     `json:"hits"`
+	Treatments        int     `json:"treatments"`
+	Revives           int     `json:"revives"`
+	MedicalPoints     float64 `json:"medicalPoints"` // treatments and revives weighed by stats.Medical
 	Attendance        int     `json:"attendance"`
 	Accuracy          float64 `json:"accuracy"`
 	KD                float64 `json:"kd"` // kills / deaths (kills when there are no deaths)
@@ -48,6 +52,9 @@ type Squad struct {
 	KillAssists       int     `json:"killAssists"`
 	ShotsFired        int     `json:"shotsFired"`
 	Hits              int     `json:"hits"`
+	Treatments        int     `json:"treatments"`
+	Revives           int     `json:"revives"`
+	MedicalPoints     float64 `json:"medicalPoints"`
 	Accuracy          float64 `json:"accuracy"`
 	KD                float64 `json:"kd"`
 	Score             float64 `json:"score"` // confidence-weighted K/D used for the "best squad" award
@@ -57,14 +64,17 @@ type Squad struct {
 
 // Totals sums all players.
 type Totals struct {
-	Missions          int `json:"missions"`
-	Players           int `json:"players"`
-	Squads            int `json:"squads"`
-	Kills             int `json:"kills"`
-	Deaths            int `json:"deaths"`
-	TeamKills         int `json:"teamKills"`
-	VehiclesDestroyed int `json:"vehiclesDestroyed"`
-	KillAssists       int `json:"killAssists"`
+	Missions          int     `json:"missions"`
+	Players           int     `json:"players"`
+	Squads            int     `json:"squads"`
+	Kills             int     `json:"kills"`
+	Deaths            int     `json:"deaths"`
+	TeamKills         int     `json:"teamKills"`
+	VehiclesDestroyed int     `json:"vehiclesDestroyed"`
+	KillAssists       int     `json:"killAssists"`
+	Treatments        int     `json:"treatments"`
+	Revives           int     `json:"revives"`
+	MedicalPoints     float64 `json:"medicalPoints"`
 }
 
 // Result is the full aggregation for a filter.
@@ -76,14 +86,15 @@ type Result struct {
 	// squadKey maps a lower-cased squad to its display name.
 	squadKey map[string]string
 	rows     []store.Row
+	medical  stats.Medical
 	// fullPlayers and fullSquads keep the unfiltered lists once Hide has run.
 	fullPlayers []Player
 	fullSquads  []Squad
 }
 
-// Build aggregates rows (ordered by date) of the given missions.
-func Build(missions []store.Mission, rows []store.Row) *Result {
-	r := &Result{Missions: missions, rows: rows, squadKey: normaliseSquads(rows)}
+// Build aggregates rows (ordered by date) of the given missions; med weighs medical points.
+func Build(missions []store.Mission, rows []store.Row, med stats.Medical) *Result {
+	r := &Result{Missions: missions, rows: rows, squadKey: normaliseSquads(rows), medical: med}
 
 	type acc struct {
 		p        *Player
@@ -106,6 +117,8 @@ func Build(missions []store.Mission, rows []store.Row) *Result {
 		p.KillAssists += row.KillAssists
 		p.ShotsFired += row.Shots
 		p.Hits += row.Hits
+		p.Treatments += row.Treatments
+		p.Revives += row.Revives
 		a.missions[row.MissionID] = true
 		p.LastSeen = row.Date
 		// The player is shown in the squad of their latest mission, also when they left it;
@@ -124,13 +137,17 @@ func Build(missions []store.Mission, rows []store.Row) *Result {
 		p := byName[name].p
 		p.Accuracy = accuracy(p.Hits, p.ShotsFired)
 		p.KD = round2(float64(p.Kills) / float64(max(p.Deaths, 1)))
+		p.MedicalPoints = med.Points(p.Treatments, p.Revives)
 		r.Players = append(r.Players, *p)
 		r.Totals.Kills += p.Kills
 		r.Totals.Deaths += p.Deaths
 		r.Totals.TeamKills += p.TeamKills
 		r.Totals.VehiclesDestroyed += p.VehiclesDestroyed
 		r.Totals.KillAssists += p.KillAssists
+		r.Totals.Treatments += p.Treatments
+		r.Totals.Revives += p.Revives
 	}
+	r.Totals.MedicalPoints = med.Points(r.Totals.Treatments, r.Totals.Revives)
 	slices.SortFunc(r.Players, func(a, b Player) int { return strings.Compare(a.Name, b.Name) })
 
 	r.Squads = r.buildSquads(rows, nil)
@@ -208,6 +225,8 @@ func (r *Result) buildSquads(rows []store.Row, only func(string) bool) []Squad {
 		s.KillAssists += row.KillAssists
 		s.ShotsFired += row.Shots
 		s.Hits += row.Hits
+		s.Treatments += row.Treatments
+		s.Revives += row.Revives
 		s.Attendance++
 		a.players[row.Name] = true
 		a.missions[row.MissionID] = true
@@ -223,6 +242,7 @@ func (r *Result) buildSquads(rows []store.Row, only func(string) bool) []Squad {
 		s.AvgAttendance = round2(avg)
 		s.Accuracy = accuracy(s.Hits, s.ShotsFired)
 		s.KD = round2(float64(s.Kills) / float64(max(s.Deaths, 1)))
+		s.MedicalPoints = r.medical.Points(s.Treatments, s.Revives)
 		out = append(out, *s)
 	}
 
@@ -266,7 +286,7 @@ func (r *Result) SquadMembers(squad string, cols []Column) []Player {
 			rows = append(rows, row)
 		}
 	}
-	sub := Build(r.Missions, rows)
+	sub := Build(r.Missions, rows, r.medical)
 	sub.ApplyColumns(cols)
 	return sub.Players
 }
@@ -378,6 +398,12 @@ func SortPlayers(ps []Player, field string, desc bool) {
 			return float64(p.ShotsFired)
 		case "hits":
 			return float64(p.Hits)
+		case "treatments":
+			return float64(p.Treatments)
+		case "revives":
+			return float64(p.Revives)
+		case "medicalPoints":
+			return p.MedicalPoints
 		default:
 			return float64(p.Kills)
 		}
@@ -428,6 +454,12 @@ func SortSquads(ss []Squad, field string, desc bool) {
 			return float64(s.KillAssists)
 		case "score":
 			return s.Score
+		case "treatments":
+			return float64(s.Treatments)
+		case "revives":
+			return float64(s.Revives)
+		case "medicalPoints":
+			return s.MedicalPoints
 		default:
 			return float64(s.Kills)
 		}
@@ -479,6 +511,7 @@ type Achievements struct {
 	TopAssists    *PlayerAward `json:"topAssists"`    // most kill assists
 	TopTeamKiller *PlayerAward `json:"topTeamKiller"` // most team kills
 	TopVehicles   *PlayerAward `json:"topVehicles"`   // most vehicles destroyed
+	TopMedic      *PlayerAward `json:"topMedic"`      // most medical points
 	TopSquad      *SquadAward  `json:"topSquad"`      // best confidence-weighted squad K/D
 	LongestKill   *KillAward   `json:"longestKill"`   // longest kill of a player or AI soldier
 }
@@ -501,6 +534,9 @@ func (r *Result) Achievements(longest *store.Kill) Achievements {
 		}
 		if p.KillAssists > 0 && (a.TopAssists == nil || float64(p.KillAssists) > a.TopAssists.Value) {
 			a.TopAssists = award(p, p.KillAssists)
+		}
+		if p.MedicalPoints > 0 && (a.TopMedic == nil || p.MedicalPoints > a.TopMedic.Value) {
+			a.TopMedic = &PlayerAward{Name: p.Name, Squad: p.Squad, SquadRaw: p.SquadRaw, Value: p.MedicalPoints}
 		}
 	}
 	for _, s := range r.Squads {

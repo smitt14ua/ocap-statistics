@@ -383,3 +383,46 @@ func TestMinMissions(t *testing.T) {
 		t.Errorf("negative minMissions accepted: %d", rec.Code)
 	}
 }
+
+// Medical points weigh treatments and revives by the settings without a recompute; Steam ids
+// are stored but never published.
+func TestMedicalPoints(t *testing.T) {
+	_, sy, h := setup(t)
+	runSync(t, sy)
+	medicalPoints := func() float64 {
+		t.Helper()
+		var p struct{ Player report.Player }
+		get(t, h, "/api/v1/players/Rookie", &p)
+		if p.Player.Treatments != 2 || p.Player.Revives != 2 {
+			t.Errorf("Rookie = %+v, want 2 treatments and 2 revives in two missions", p.Player)
+		}
+		return p.Player.MedicalPoints
+	}
+	if got := medicalPoints(); got != 12 {
+		t.Errorf("medical points = %v, want 2 × (1 + 5)", got)
+	}
+
+	c := login(t, h, "admin", "secret-password")
+	var state struct{ Settings settings.Settings }
+	_ = json.Unmarshal(c.do(http.MethodGet, "/api/admin/state", nil).Body.Bytes(), &state)
+	set := state.Settings
+	set.Medical.Treatment, set.Medical.Revive = 0.5, 10
+	rec := c.do(http.MethodPut, "/api/admin/settings", set)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"rules":false`) {
+		t.Fatalf("save: %d %s", rec.Code, rec.Body)
+	}
+	if got := medicalPoints(); got != 21 {
+		t.Errorf("medical points = %v, want 2 × (0.5 + 10)", got)
+	}
+	set.Medical.Revive = -1
+	if rec := c.do(http.MethodPut, "/api/admin/settings", set); rec.Code != http.StatusBadRequest {
+		t.Errorf("negative weight accepted: %d", rec.Code)
+	}
+
+	for _, u := range []string{"/api/v1/stats", "/api/v1/players", "/api/v1/players?format=csv", "/api/v1/players/Smith",
+		"/api/v1/squads/MILF", "/api/v1/missions/1"} {
+		if rec := get(t, h, u, nil); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "76561190000000001") {
+			t.Errorf("GET %s: %d, publishes the Steam id: %v", u, rec.Code, strings.Contains(rec.Body.String(), "76561190000000001"))
+		}
+	}
+}

@@ -322,6 +322,9 @@ class Admin {
     $('sHitAssists').checked = !!assists.hits;
     $('sAssistWindow').value = (assists.window || 300) / 60;
     $('sAssistWindow').disabled = !assists.hits;
+    const medical = s.medical || { treatment: 1, revive: 5 };
+    $('sMedTreatment').value = medical.treatment;
+    $('sMedRevive').value = medical.revive;
     $('sRotationSince').value = s.rotation.since || '';
     $('sides').replaceChildren();
     (s.rotation.sides || []).forEach(side => this.addSide(side));
@@ -360,11 +363,11 @@ class Admin {
   renderSortOptions(sort) {
     const base = {
       players: [['kills', 'col.kills'], ['deaths', 'col.deaths'], ['teamKills', 'col.teamKills.title'], ['attendance', 'col.attendance'],
-        ['accuracy', 'col.accuracy'], ['vehiclesDestroyed', 'col.vehicles.title'], ['killAssists', 'tile.assists'], ['kd', 'col.kd'],
-        ['name', 'col.name'], ['squad', 'col.squad']],
+        ['accuracy', 'col.accuracy'], ['vehiclesDestroyed', 'col.vehicles.title'], ['killAssists', 'tile.assists'], ['medicalPoints', 'tile.medical'],
+        ['kd', 'col.kd'], ['name', 'col.name'], ['squad', 'col.squad']],
       squads: [['kills', 'col.kills'], ['deaths', 'col.deaths'], ['teamKills', 'col.teamKills.title'], ['attendance', 'col.attendance'],
-        ['accuracy', 'col.accuracy'], ['vehiclesDestroyed', 'col.vehicles.title'], ['killAssists', 'tile.assists'], ['kd', 'col.kd'],
-        ['players', 'col.players'], ['name', 'col.squad']],
+        ['accuracy', 'col.accuracy'], ['vehiclesDestroyed', 'col.vehicles.title'], ['killAssists', 'tile.assists'], ['medicalPoints', 'tile.medical'],
+        ['kd', 'col.kd'], ['players', 'col.players'], ['name', 'col.squad']],
     };
     const saved = (this.state && this.state.settings.columns) || [];
     for (const [table, fieldId, orderId] of [['players', 'sortPlayersField', 'sortPlayersOrder'], ['squads', 'sortSquadsField', 'sortSquadsOrder']]) {
@@ -434,7 +437,8 @@ class Admin {
   }
 
   renderVarList() {
-    const vars = ['kills', 'deaths', 'teamKills', 'vehiclesDestroyed', 'killAssists', 'shotsFired', 'hits', 'accuracy', 'kd', 'attendance', 'players', 'squadMissions', 'maxAttendance', 'missions', 'isSquad'];
+    const vars = ['kills', 'deaths', 'teamKills', 'vehiclesDestroyed', 'killAssists', 'shotsFired', 'hits', 'accuracy', 'kd', 'attendance', 'players', 'squadMissions', 'maxAttendance', 'missions', 'isSquad',
+      'treatments', 'revives', 'medicalPoints'];
     $('varList').replaceChildren(...vars.flatMap(v => [el('dt', { class: 'mono' }, v), el('dd', {}, t(`var.${v}`))]));
   }
 
@@ -462,6 +466,7 @@ class Admin {
       minMissions: Math.max(0, Math.round(Number($('sMinMissions').value || 0))),
       nickname: this.collectNickname(),
       assists: { hits: $('sHitAssists').checked, window: Math.round(Number($('sAssistWindow').value || 0) * 60) },
+      medical: { treatment: Number($('sMedTreatment').value || 0), revive: Number($('sMedRevive').value || 0) },
       columns: [...$('columns').querySelectorAll('.column-card')].map(card => this.columnFrom(card)),
       sort: {
         players: { field: $('sortPlayersField').value, order: $('sortPlayersOrder').value },

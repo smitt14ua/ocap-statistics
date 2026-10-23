@@ -59,3 +59,9 @@ Users and sessions are stored in SQLite; passwords are hashed with PBKDF2-HMAC-S
 ## 12. Community-neutral open source
 
 The project started for one community but is published for any OCAP server. Community-specific values (URLs, tags, squad names, rotation sides, titles, logos) live only in deployment configuration, never in code, defaults, docs or tests.
+
+## 13. Medical statistics from ACE activity logs; Steam ids stored, not published
+
+OCAP records no "X treated Y" event. Recent versions write `medicalSnapshot` events with the patient's ACE activity log: localized text lines such as "Name has bandaged patient", of which ACE keeps only the last few. The digest therefore keeps each new log line (found by overlapping consecutive snapshots) with the medic resolved by name, and `ace3Unconscious` changes; counting stays independent of the game language because every line counts as one treatment. Medical points are weights over treatments and revives applied in `report.Build`, so tuning them in the admin panel needs no recompute.
+
+Players' Steam ids (`playerUid` of the snapshots) are stored per mission for a future sign-in with personal statistics, but no public endpoint, CSV or page shows them, and players are still merged by nickname.
