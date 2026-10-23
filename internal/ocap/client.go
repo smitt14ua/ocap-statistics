@@ -105,10 +105,10 @@ func (c *Client) OpenMission(ctx context.Context, filename string) (io.ReadClose
 		if err == nil {
 			return maybeGunzip(f)
 		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-		c.log.Warn("recording not found in data dir, downloading it", "path", path)
+		// Not only a missing file: OCAP writes recordings received over its WebSocket
+		// ingest with mode 0600, unreadable for a container running as another user.
+		// OCAP itself can still serve them over HTTP.
+		c.log.Warn("cannot read recording from data dir, downloading it", "path", path, "err", err)
 	}
 	resp, err := c.get(ctx, c.baseURL+"/data/"+url.PathEscape(filename)+".json.gz")
 	if err != nil {
