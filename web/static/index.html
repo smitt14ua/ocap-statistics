@@ -28,8 +28,8 @@
     .hidden { display: none !important; }
     .head-actions, .account { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-    /* The signed-in player: their card, and their rows and awards everywhere. A badge says it
-       in words, so the highlight does not rely on colour alone. */
+    /* The signed-in player: their card, and their rows and awards everywhere, marked by a
+       tint (and hidden text for screen readers, see youBadge). */
     .me-card[hidden] { display: none; }
     .me-card { border-color: var(--accent-dark); }
     .me-card h2 { margin-bottom: 10px; }
@@ -45,10 +45,8 @@
     .me-stats b { display: block; font-size: 18px; font-weight: 800; color: var(--text-strong); font-variant-numeric: tabular-nums; }
     .me-stats span { display: block; font-size: 10px; line-height: 1.3; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; overflow-wrap: anywhere; }
     .me-card p { color: var(--muted); }
-    tr.mine td { background: rgba(72, 187, 120, .1); }
-    tbody tr.mine:hover td { background: rgba(72, 187, 120, .16); }
-    tr.mine td:first-child { box-shadow: inset 3px 0 var(--accent); }
-    .badge.you { background: var(--accent-dark); color: #b8f0cc; margin-left: 6px; font-weight: 700; text-transform: none; letter-spacing: 0; }
+    tr.mine td { background: rgba(72, 187, 120, .12); }
+    tbody tr.mine:hover td { background: rgba(72, 187, 120, .18); }
     .award.mine, .award.mine.clickable:hover { border-color: var(--accent); background: rgba(72, 187, 120, .12); box-shadow: inset 0 0 0 1px var(--accent); }
     .award.mine.clickable:hover { background: rgba(72, 187, 120, .18); }
 

@@ -588,7 +588,7 @@ class StatsApp {
       const node = el(p ? 'button' : 'div', { type: p ? 'button' : null, class: `award${p ? ' clickable' : ''}${mine ? ' mine' : ''}`, title: p && c.title ? c.title(p) : null },
         el('div', { class: 'num' }, el('b', {}, p ? (c.squad ? fmt(p.value) : c.points ? fmtPoints(p.value) : Math.round(p.value)) : 0), el('span', {}, t(c.unit))),
         // The card itself is highlighted; screen readers get the words instead.
-        el('div', { class: 'who' }, el('small', {}, t(c.label), mine ? el('span', { class: 'sr-only' }, ` (${t(c.squad ? 'me.yourSquad' : 'me.you')})`) : null), el('b', {}, p ? p.name : '—'), el('span', {}, p ? (c.sub ? c.sub(p) : squadOf(p)) : '—')));
+        el('div', { class: 'who' }, el('small', {}, t(c.label), mine ? this.youBadge(c.squad) : null), el('b', {}, p ? p.name : '—'), el('span', {}, p ? (c.sub ? c.sub(p) : squadOf(p)) : '—')));
       if (p) node.addEventListener('click', () => c.squad ? this.openSquad(p.name) : this.openPlayer(p.name));
       return node;
     }));
@@ -624,8 +624,9 @@ class StatsApp {
     return new Set(this.data ? this.data.players.filter(p => p.squad && this.mine.has(p.name)).map(p => p.squad) : []);
   }
 
+  // youBadge names the highlight for screen readers; on screen the row colour is enough.
   youBadge(squad) {
-    return el('span', { class: 'badge you' }, t(squad ? 'me.yourSquad' : 'me.you'));
+    return el('span', { class: 'sr-only' }, ` (${t(squad ? 'me.yourSquad' : 'me.you')})`);
   }
 
   renderAccount() {
