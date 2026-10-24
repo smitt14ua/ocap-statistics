@@ -381,4 +381,18 @@
   'feed.cause.vehicle.title': 'Die Aufzeichnung nennt keinen Schützen: Das Opfer starb im Fahrzeug, das dieser Spieler zerstört hat',
   'feed.cause.lastHit': 'letzter Treffer',
   'feed.cause.lastHit.title': 'Die Aufzeichnung nennt keinen Schützen (Selbstmord, Ertrinken, Wrack): Der Kill geht an den Gegner, der das Opfer zuletzt getroffen hat',
+
+  'auth.signIn': 'Mit Steam anmelden',
+  'auth.signOut': 'Abmelden',
+  'auth.profile': 'Mein Profil',
+  'auth.failed': 'Anmeldung über Steam fehlgeschlagen. Bitte erneut versuchen.',
+  'me.title': 'Meine Statistik',
+  'me.you': 'Sie',
+  'me.yourSquad': 'Ihr Squad',
+  'me.rank': 'Platz {n} von {total}',
+  'me.rankTitle': 'Platz in der Spielertabelle mit der Standardsortierung',
+  'me.unranked': 'Nicht in der Tabelle: weniger als {n} Missionen',
+  'me.noGames': 'Noch keine Missionen mit Ihrem Steam-Konto. Spieler werden an der Steam-ID erkannt, die neuere OCAP-Versionen in Aufnahmen speichern.',
+  'me.noneInPeriod': 'Keine gezählten Missionen in diesem Zeitraum ({period}).',
+  'me.alsoAs': 'Weitere Namen: {names}',
 };

@@ -381,4 +381,18 @@
   'feed.cause.vehicle.title': 'Nagranie nie podaje zabójcy: ofiara zginęła w pojeździe, który zniszczył ten gracz',
   'feed.cause.lastHit': 'ostatnie trafienie',
   'feed.cause.lastHit.title': 'Nagranie nie podaje zabójcy (samobójstwo, utonięcie, wrak): zabójstwo zalicza się wrogowi, który trafił ofiarę jako ostatni',
+
+  'auth.signIn': 'Zaloguj przez Steam',
+  'auth.signOut': 'Wyloguj',
+  'auth.profile': 'Mój profil',
+  'auth.failed': 'Nie udało się zalogować przez Steam. Spróbuj ponownie.',
+  'me.title': 'Moje statystyki',
+  'me.you': 'ty',
+  'me.yourSquad': 'twój oddział',
+  'me.rank': '#{n} z {total}',
+  'me.rankTitle': 'Miejsce w tabeli graczy przy domyślnym sortowaniu',
+  'me.unranked': 'Brak w tabeli: mniej niż {n} misji',
+  'me.noGames': 'Brak jeszcze misji z twoim kontem Steam. Gracze są rozpoznawani po Steam ID, które nowsze wersje OCAP zapisują w nagraniach.',
+  'me.noneInPeriod': 'Brak zaliczonych misji w tym okresie ({period}).',
+  'me.alsoAs': 'Inne nicki: {names}',
 };

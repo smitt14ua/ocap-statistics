@@ -49,15 +49,17 @@ internal/digest/digest.go     streaming JSON recording parser → Digest (entiti
 internal/stats/compute.go     per-mission rules: Compute, PlayerRow, KillRow, nickname Rules/ParseName
 internal/store/store.go       SQLite schema, migrate(), missions/digests/rows/kills queries, Filter
 internal/store/users.go       admin users and sessions
+internal/store/accounts.go    player sessions (Steam sign-in), names of a Steam id
 internal/report/report.go     aggregation over a period: Player, Squad, Totals, achievements, rotation, sorting
 internal/report/columns.go    custom columns: Column, Variables, NormalizeColumns, ApplyColumns, Preview
 internal/formula/formula.go   formula language: lexer, parser, evaluator (no reflection, no eval)
 internal/settings/settings.go runtime settings: config defaults + admin overrides stored in meta table
 internal/syncer/syncer.go     task loop: sync / recompute / resync, retries, missing recordings
-internal/auth/                PBKDF2 password hashing, session tokens, default admin from env
+internal/auth/                PBKDF2 password hashing, session tokens, default admin from env, Steam OpenID (steam.go)
 internal/api/server.go        Server, routes, error helpers, cached handler, gzip/ETag, middleware
 internal/api/stats.go         public /api/v1 handlers, filters, CSV
 internal/api/admin.go         /api/admin handlers: login, settings, previews, tasks, users
+internal/api/account.go       /api/auth handlers: Steam sign-in and callback, me, logout
 internal/api/cache.go         response cache + per-filter aggregation cache (singleflight)
 internal/api/static.go        embedded static files, ETag, gzip, per-page CSP
 internal/api/openapi.json     public API spec (admin API intentionally not documented)
@@ -125,3 +127,4 @@ docs/decisions.md             why things are built the way they are (SQLite, dig
 - `Server.report` hides players and squads below the "minimum missions" setting from `Players`/`Squads`; look a player or squad up with `FindPlayer`/`FindSquad`, which also see hidden ones.
 - OCAP writes recordings received over its WebSocket ingest with mode 0600 (`os.CreateTemp`), so a mounted data dir may hold files this service cannot read; `ocap.Client.OpenMission` downloads over HTTP on any open error, not only a missing file.
 - Medical data comes only from `medicalSnapshot` events (players only): full snapshots or diffs (`diffOf` + changed fields under `set`), whose `activity` is the last few lines of the ACE log, localized; `digest.Parse` keeps the lines new since the previous snapshot. `PlayerRow.SteamID` must never reach a public response (`TestMedicalPoints` checks).
+- Steam sign-in (`internal/api/account.go`): only `/api/auth/me` returns a Steam id, the viewer's own; it is not cached and not under `/api/v1/`, so it gets no CORS headers. The page highlights a player by the names `store.Store.SteamNames` returns, not by id. `TestSteamLogin` runs the OpenID flow against a fake provider that confirms only unchanged assertions.

@@ -1,4 +1,4 @@
-// Package auth implements admin passwords and sessions.
+// Package auth implements admin passwords and sessions, and the Steam sign-in of players.
 package auth
 
 import (

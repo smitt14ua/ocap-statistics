@@ -3,6 +3,7 @@
   "db": "data/stats.db",
   "adminToken": "",
   "trustProxy": false,
+  "publicUrl": "",
   "log": {
     "level": "info",
     "format": "text"
@@ -53,5 +54,9 @@
     "title": "OCAP Statistics",
     "logoUrl": "",
     "ocapUrl": ""
+  },
+  "steam": {
+    "login": false,
+    "sessionTTL": "720h"
   }
 }

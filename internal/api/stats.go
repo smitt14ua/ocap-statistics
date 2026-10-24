@@ -255,6 +255,7 @@ func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) {
 		"minDuration": set.MinDuration,
 		"minMissions": set.MinMissions,
 		"rotation":    set.Rotation,
+		"steamLogin":  s.cfg.Steam.Login,
 	})
 }
 

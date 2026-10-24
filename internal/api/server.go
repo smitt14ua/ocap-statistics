@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/smitt14ua/ocap-statistics/internal/auth"
 	"github.com/smitt14ua/ocap-statistics/internal/config"
 	"github.com/smitt14ua/ocap-statistics/internal/settings"
 	"github.com/smitt14ua/ocap-statistics/internal/store"
@@ -39,6 +40,7 @@ type Server struct {
 	responses *responseCache
 	results   *resultCache
 	limiter   *loginLimiter
+	steam     *auth.Steam
 	// hashSlots bounds concurrent password hashing (CPU-heavy by design).
 	hashSlots chan struct{}
 }
@@ -49,6 +51,7 @@ func New(cfg config.Config, build BuildInfo, st *store.Store, sm *settings.Manag
 		responses: newResponseCache(512, 64<<20),
 		results:   newResultCache(32),
 		limiter:   newLoginLimiter(),
+		steam:     auth.NewSteam(),
 		hashSlots: make(chan struct{}, 2),
 	}
 }
@@ -72,6 +75,7 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("GET /api/v1/rotation", s.cached(s.rotation))
 
 	s.adminRoutes(mux)
+	s.accountRoutes(mux)
 
 	mux.HandleFunc("GET /api/openapi.json", s.openapi)
 	mux.HandleFunc("GET /api/docs", s.docs)

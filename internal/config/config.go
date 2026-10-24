@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -47,7 +48,11 @@ type Config struct {
 	// TrustProxy makes the service trust X-Forwarded-For / X-Forwarded-Proto / X-Real-IP.
 	// Enable it only when the service is reachable exclusively through a reverse proxy.
 	TrustProxy bool `json:"trustProxy"`
-	Log        Log  `json:"log"`
+	// PublicURL is the address users open the site at (https://stats.example.com), used for
+	// the Steam sign-in. Empty = derived from the request (Host, X-Forwarded-* behind a
+	// trusted proxy).
+	PublicURL string `json:"publicUrl"`
+	Log       Log    `json:"log"`
 	// AdminToken, when set, authorises POST /api/v1/sync and the admin API with
 	// "Authorization: Bearer <token>" (for scripts and webhooks).
 	AdminToken string   `json:"adminToken"`
@@ -57,6 +62,14 @@ type Config struct {
 	Stats      Stats    `json:"stats"`
 	Rotation   Rotation `json:"rotation"`
 	UI         UI       `json:"ui"`
+	Steam      Steam    `json:"steam"`
+}
+
+// Steam configures "Sign in through Steam" on the site. Signed-in players see their own
+// statistics highlighted; they are recognised by the Steam ids in recordings.
+type Steam struct {
+	Login      bool     `json:"login"`
+	SessionTTL Duration `json:"sessionTTL"`
 }
 
 // Log configures logging.
@@ -171,6 +184,7 @@ func Default() Config {
 		UI: UI{
 			Title: "OCAP Statistics",
 		},
+		Steam: Steam{SessionTTL: Duration(30 * 24 * time.Hour)},
 	}
 }
 
@@ -219,6 +233,7 @@ func applyEnv(cfg *Config) error {
 	str("OCAPSTATS_UI_TITLE", &cfg.UI.Title)
 	str("OCAPSTATS_UI_LOGO_URL", &cfg.UI.LogoURL)
 	str("OCAPSTATS_UI_OCAP_URL", &cfg.UI.OCAPURL)
+	str("OCAPSTATS_PUBLIC_URL", &cfg.PublicURL)
 
 	if v, ok := os.LookupEnv("OCAPSTATS_SYNC_TAGS"); ok {
 		cfg.Sync.Tags = splitList(v)
@@ -228,6 +243,7 @@ func applyEnv(cfg *Config) error {
 		"OCAPSTATS_ADMIN_PASSWORD_RESET": &cfg.Admin.ResetPassword,
 		"OCAPSTATS_TRUST_PROXY":          &cfg.TrustProxy,
 		"OCAPSTATS_HIT_ASSISTS":          &cfg.Stats.Assists.Hits,
+		"OCAPSTATS_STEAM_LOGIN":          &cfg.Steam.Login,
 	} {
 		if v, ok := os.LookupEnv(key); ok {
 			b, err := strconv.ParseBool(v)
@@ -269,6 +285,7 @@ func applyEnv(cfg *Config) error {
 		"OCAPSTATS_SYNC_INTERVAL":      &cfg.Sync.Interval,
 		"OCAPSTATS_SYNC_REQUEST_DELAY": &cfg.Sync.RequestDelay,
 		"OCAPSTATS_ADMIN_SESSION_TTL":  &cfg.Admin.SessionTTL,
+		"OCAPSTATS_STEAM_SESSION_TTL":  &cfg.Steam.SessionTTL,
 	} {
 		if v, ok := os.LookupEnv(key); ok {
 			d, err := time.ParseDuration(v)
@@ -317,6 +334,15 @@ func (c *Config) validate() error {
 	}
 	if c.Admin.SessionTTL.D() < time.Minute {
 		c.Admin.SessionTTL = Duration(7 * 24 * time.Hour)
+	}
+	if c.Steam.SessionTTL.D() < time.Minute {
+		c.Steam.SessionTTL = Duration(30 * 24 * time.Hour)
+	}
+	if c.PublicURL = strings.TrimRight(c.PublicURL, "/"); c.PublicURL != "" {
+		u, err := url.Parse(c.PublicURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("publicUrl: expected an http(s) address such as https://stats.example.com, got %q", c.PublicURL)
+		}
 	}
 	if c.Sync.MaxAttempts < 1 {
 		c.Sync.MaxAttempts = 1

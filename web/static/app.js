@@ -153,6 +153,11 @@ class StatsApp {
     this.singles = true;
     this.table = $('statsTable');
 
+    // The player signed in through Steam (api/auth/me) and the names they played under.
+    this.me = null;
+    this.mine = new Set();
+    this.accountReady = Promise.resolve();
+
     this.lastFocus = null;
     // The view shown in the detail modal and the views it was opened from (for Back).
     this.detailView = null;
@@ -181,7 +186,9 @@ class StatsApp {
     }
     this.setView(params.get('view') === 'squads' ? 'squads' : 'players', false);
     const mission = params.get('mission');
+    this.accountReady = this.loadAccount();
     await this.load();
+    if (params.get('login') === 'failed') this.toast(t('n.error'), t('auth.failed'), true);
     if (/^\d+$/.test(mission || '')) this.openMission(mission);
   }
 
@@ -223,7 +230,8 @@ class StatsApp {
     });
     document.addEventListener('langchange', () => {
       this.renderHeaders();
-      if (this.data) { this.buildFilter(); this.render(); this.renderAchievements(); }
+      this.renderAccount();
+      if (this.data) { this.buildFilter(); this.render(); this.renderAchievements(); this.renderMe(); }
       this.refreshStatus();
       for (const m of document.querySelectorAll('.modal.open')) this.closeModal(m);
     });
@@ -299,7 +307,8 @@ class StatsApp {
     const started = performance.now();
     try {
       const q = this.query();
-      const [stats, rot] = await Promise.all([apiGet(`stats?${q}`), apiGet(`rotation?${q}`)]);
+      // The rows of the signed-in player are highlighted, so the account comes first.
+      const [stats, rot] = await Promise.all([apiGet(`stats?${q}`), apiGet(`rotation?${q}`), this.accountReady]);
       this.data = stats;
       this.rotation = rot.rotation;
       this.range = this.periodText();
@@ -308,6 +317,7 @@ class StatsApp {
       this.buildFilter();
       this.render();
       this.renderAchievements();
+      this.renderMe();
       const hasRotation = this.rotation.sides && this.rotation.sides.length > 0;
       $('showRotation').classList.toggle('hidden', !hasRotation);
       $('copyRotation').classList.toggle('hidden', !hasRotation);
@@ -467,7 +477,10 @@ class StatsApp {
         (s.name ? this.selected.has(s.name) : this.singles))
       : this.data.players.filter(p => (!term || p.name.toLowerCase().includes(term)) &&
         (p.squad ? this.selected.has(p.squad) : this.singles));
-    const { field, dir } = this.sort;
+    return this.sortItems(list, squads, this.sort);
+  }
+
+  sortItems(list, squads, { field, dir }) {
     const value = (x) => {
       if (field === 'name') return (x.name || '').toLowerCase();
       if (field === 'squad') return (x.squadRaw || '').toLowerCase();
@@ -524,6 +537,7 @@ class StatsApp {
     });
     const squads = this.viewMode === 'squads';
     const items = this.items();
+    const mySquads = this.mySquads();
     $('totalKills').textContent = items.reduce((s, x) => s + x.kills, 0);
     $('totalDeaths').textContent = items.reduce((s, x) => s + x.deaths, 0);
     $('totalTeamKills').textContent = items.reduce((s, x) => s + x.teamKills, 0);
@@ -535,11 +549,13 @@ class StatsApp {
       const open = () => squads ? this.openSquad(x.name) : this.openPlayer(x.name);
       const [name, second, ...rest] = this.row(x, squads);
       const side = this.sideSwatch(squads ? x.name : x.squad);
+      const mine = squads ? mySquads.has(x.name) : this.mine.has(x.name);
       // The name is a button so the details are reachable from the keyboard; the whole row is
       // clickable for the mouse.
-      const tr = el('tr', { class: 'clickable' },
+      const tr = el('tr', { class: mine ? 'clickable mine' : 'clickable' },
         el('td', { class: i < 3 ? `rank-${i + 1}` : '' }, i + 1),
-        el('td', {}, squads ? side : null, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, name)),
+        el('td', {}, squads ? side : null, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, name),
+          mine ? this.youBadge(squads) : null),
         el('td', {}, squads ? null : side, second),
         rest.map(v => el('td', {}, v)));
       tr.addEventListener('click', open);
@@ -565,14 +581,118 @@ class StatsApp {
       { award: a.topSquad && { name: a.topSquad.name, value: a.topSquad.kd }, label: 'ach.topSquad', unit: 'unit.kd', squad: true, sub: () => t('ach.bestSquad') },
       { award: a.longestKill, label: 'ach.longestKill', unit: 'unit.metres', sub: (p) => `${squadOf(p)} · ${p.weapon || ''}`, title: (p) => `${p.name} → ${p.victim}, ${p.weapon} (${p.date})` },
     ];
+    const mySquads = this.mySquads();
     $('achievements').replaceChildren(...cards.map(c => {
       const p = c.award;
-      const node = el(p ? 'button' : 'div', { type: p ? 'button' : null, class: `award${p ? ' clickable' : ''}`, title: p && c.title ? c.title(p) : null },
+      const mine = p && (c.squad ? mySquads.has(p.name) : this.mine.has(p.name));
+      const node = el(p ? 'button' : 'div', { type: p ? 'button' : null, class: `award${p ? ' clickable' : ''}${mine ? ' mine' : ''}`, title: p && c.title ? c.title(p) : null },
         el('div', { class: 'num' }, el('b', {}, p ? (c.squad ? fmt(p.value) : c.points ? fmtPoints(p.value) : Math.round(p.value)) : 0), el('span', {}, t(c.unit))),
-        el('div', { class: 'who' }, el('small', {}, t(c.label)), el('b', {}, p ? p.name : '—'), el('span', {}, p ? (c.sub ? c.sub(p) : squadOf(p)) : '—')));
+        // The card itself is highlighted; screen readers get the words instead.
+        el('div', { class: 'who' }, el('small', {}, t(c.label), mine ? el('span', { class: 'sr-only' }, ` (${t(c.squad ? 'me.yourSquad' : 'me.you')})`) : null), el('b', {}, p ? p.name : '—'), el('span', {}, p ? (c.sub ? c.sub(p) : squadOf(p)) : '—')));
       if (p) node.addEventListener('click', () => c.squad ? this.openSquad(p.name) : this.openPlayer(p.name));
       return node;
     }));
+  }
+
+  // --- signed-in player ----------------------------------------------------------------
+
+  // loadAccount asks who is signed in through Steam; the page works the same without it.
+  async loadAccount() {
+    this.me = null;
+    if (this.cfg.steamLogin) {
+      try {
+        const res = await fetch('api/auth/me', { cache: 'no-store' });
+        if (res.ok) this.me = await res.json();
+      } catch { /* signed out */ }
+    }
+    this.mine = new Set(this.me && this.me.signedIn ? this.me.names.map(n => n.name) : []);
+    this.renderAccount();
+  }
+
+  // myPlayer is the signed-in player in the loaded period: the most recent of their names that
+  // played in it.
+  myPlayer() {
+    if (!this.data) return null;
+    for (const n of this.mine) {
+      const p = this.data.players.find(x => x.name === n);
+      if (p) return p;
+    }
+    return null;
+  }
+
+  mySquads() {
+    return new Set(this.data ? this.data.players.filter(p => p.squad && this.mine.has(p.name)).map(p => p.squad) : []);
+  }
+
+  youBadge(squad) {
+    return el('span', { class: 'badge you' }, t(squad ? 'me.yourSquad' : 'me.you'));
+  }
+
+  renderAccount() {
+    const box = $('account');
+    if (!this.cfg.steamLogin) { box.replaceChildren(); return; }
+    if (!this.me || !this.me.signedIn) {
+      const a = el('a', { class: 'btn primary', href: 'api/auth/steam' }, t('auth.signIn'));
+      // Steam brings the visitor back to the page as it is now (period, view, open mission).
+      a.addEventListener('click', () => { a.href = `api/auth/steam?return=${encodeURIComponent(location.search)}`; });
+      box.replaceChildren(a);
+      return;
+    }
+    const profile = el('button', { type: 'button', class: 'primary', onclick: () => this.openPlayer((this.myPlayer() || this.me.names[0]).name) }, t('auth.profile'));
+    box.replaceChildren(...(this.me.names.length ? [profile] : []),
+      el('button', { type: 'button', onclick: () => this.logout() }, t('auth.signOut')));
+  }
+
+  async logout() {
+    try {
+      const res = await fetch('api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'ocap-stats' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      this.toast(t('n.error'), e.message, true);
+      return;
+    }
+    this.me = null;
+    this.mine = new Set();
+    this.renderAccount();
+    if (this.data) { this.render(); this.renderAchievements(); }
+    this.renderMe();
+  }
+
+  // renderMe fills the card with the signed-in player's statistics for the loaded period.
+  async renderMe() {
+    const card = $('meCard');
+    card.hidden = !(this.me && this.me.signedIn);
+    if (card.hidden || !this.data) return;
+    const token = this.meToken = {};
+    let p = this.myPlayer();
+    const ranked = !!p;
+    // Players below the "minimum missions" setting are not in the table, but have statistics.
+    if (!p && this.me.names.length && this.cfg.minMissions > 0) {
+      try {
+        p = (await apiGet(`players/${encodeURIComponent(this.me.names[0].name)}?${this.query()}`)).player;
+      } catch { /* no missions in the period */ }
+      if (this.meToken !== token) return;
+    }
+    if (!this.me.names.length) { $('meBody').replaceChildren(el('p', {}, t('me.noGames'))); return; }
+    if (!p) { $('meBody').replaceChildren(el('p', {}, t('me.noneInPeriod', { period: this.range }))); return; }
+
+    const players = this.sortItems([...this.data.players], false, this.defaultSort('players'));
+    const rank = ranked ? players.findIndex(x => x.name === p.name) + 1 : 0;
+    const others = [...this.mine].filter(n => n !== p.name);
+    $('meBody').replaceChildren(el('div', { class: 'me-grid' },
+      el('div', { class: 'me-who' },
+        el('button', { type: 'button', class: 'link name', onclick: () => this.openPlayer(p.name) }, p.name),
+        el('small', {}, `${p.squadRaw ? `[${p.squadRaw}]` : t('noSquad')} · ${this.range}`),
+        rank ? el('span', { class: 'rank', title: t('me.rankTitle') }, t('me.rank', { n: rank, total: players.length }))
+          : el('small', {}, t('me.unranked', { n: this.cfg.minMissions })),
+        others.length ? el('small', {}, t('me.alsoAs', { names: others.join(', ') })) : null),
+      el('div', { class: 'me-stats' }, [
+        ['col.kills', p.kills], ['col.deaths', p.deaths], ['col.kd', fmt(p.kd)], ['tile.assists', p.killAssists],
+        ['col.vehicles.title', p.vehiclesDestroyed], ['tile.medical', fmtPoints(p.medicalPoints)], ['col.accuracy', fmt(p.accuracy)], ['tile.missions', p.attendance],
+        ...this.columns(false).map(c => [c.name, this.customValue(p, c), true]),
+      ].map(([label, value, literal]) => {
+        return el('div', {}, el('b', {}, value), el('span', {}, literal ? label : t(label)));
+      }))));
   }
 
   // --- modals ----------------------------------------------------------------------
@@ -711,8 +831,9 @@ class StatsApp {
         el('div', { style: 'height:16px' }),
         this.dataTable(['col.name', 'col.tag', 'col.missions', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.medical', 'col.accuracy', 'col.kd'],
           d.members.map(p => {
-            const tr = el('tr', { class: 'clickable' },
-              el('td', {}, p.name), el('td', {}, p.squadRaw || '-'), el('td', {}, p.attendance),
+            const mine = this.mine.has(p.name);
+            const tr = el('tr', { class: mine ? 'clickable mine' : 'clickable' },
+              el('td', {}, p.name, mine ? this.youBadge(false) : null), el('td', {}, p.squadRaw || '-'), el('td', {}, p.attendance),
               el('td', {}, p.kills), el('td', {}, p.deaths), el('td', {}, p.teamKills),
               el('td', {}, p.vehiclesDestroyed), el('td', {}, p.killAssists), el('td', {}, this.medical(p)), el('td', {}, fmt(p.accuracy)), el('td', {}, fmt(p.kd)));
             tr.addEventListener('click', () => this.openPlayer(p.name));
@@ -761,13 +882,15 @@ class StatsApp {
     const sum = (field) => players.reduce((s, p) => s + p[field], 0);
     const replay = this.replayURL(m.id, m.filename);
     const feed = this.missionFeed(d, view);
+    const mySquads = new Set(players.filter(p => p.squad && this.mine.has(p.name)).map(p => p.squad.toLowerCase()));
     const tabs = this.missionTabs(view, {
       players: this.dataTable(['col.name', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.medical', 'tile.shots', 'col.hits', 'col.accuracy'],
         players.map(p => {
           // A player opens the kill feed filtered to what they did and what happened to them.
           const open = () => { feed.select(p.name); tabs.show('feed'); };
-          const tr = el('tr', { class: 'clickable' },
-            el('td', {}, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, p.name)),
+          const mine = this.mine.has(p.name);
+          const tr = el('tr', { class: mine ? 'clickable mine' : 'clickable' },
+            el('td', { 'data-sort': p.name }, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, p.name), mine ? this.youBadge(false) : null),
             el('td', {}, p.squadRaw || '-'), el('td', {}, sideDot(p.side), p.side),
             el('td', {}, p.kills), el('td', {}, p.deaths), el('td', {}, p.teamKills), el('td', {}, p.vehiclesDestroyed), el('td', {}, p.killAssists),
             el('td', {}, this.medical(p)), el('td', {}, p.shotsFired), el('td', {}, p.hits), el('td', {}, p.shotsFired ? fmt(Math.min(100, p.hits / p.shotsFired * 100)) : fmt(0)));
@@ -775,8 +898,8 @@ class StatsApp {
           return tr;
         }), [3, false]),
       squads: this.dataTable(['col.squad', 'col.players', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.medical', 'col.accuracy', 'col.kd'],
-        [...d.squads].sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name)).map(s => el('tr', {},
-          el('td', {}, s.name || t('noSquad')), el('td', {}, s.players), el('td', {}, s.kills), el('td', {}, s.deaths), el('td', {}, s.teamKills),
+        [...d.squads].sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name)).map(s => el('tr', { class: mySquads.has(s.name.toLowerCase()) ? 'mine' : null },
+          el('td', { 'data-sort': s.name || t('noSquad') }, s.name || t('noSquad'), mySquads.has(s.name.toLowerCase()) ? this.youBadge(true) : null), el('td', {}, s.players), el('td', {}, s.kills), el('td', {}, s.deaths), el('td', {}, s.teamKills),
           el('td', {}, s.vehiclesDestroyed), el('td', {}, s.killAssists), el('td', {}, this.medical(s)), el('td', {}, fmt(s.accuracy)), el('td', {}, fmt(s.kd)))), [2, false]),
       feed: feed.node,
     });

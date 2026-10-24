@@ -61,7 +61,8 @@ func (f *fakeOCAP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func setup(t *testing.T) (*fakeOCAP, *syncer.Syncer, http.Handler) {
+// setup builds the full handler over a fake OCAP; opts adjust the server before it starts.
+func setup(t *testing.T, opts ...func(*Server)) (*fakeOCAP, *syncer.Syncer, http.Handler) {
 	t.Helper()
 	rec, err := os.ReadFile("../stats/testdata/recording.json")
 	if err != nil {
@@ -100,7 +101,11 @@ func setup(t *testing.T) (*fakeOCAP, *syncer.Syncer, http.Handler) {
 		t.Fatal(err)
 	}
 	sy := syncer.New(cfg, ocap.NewClient(srv.URL, "", "", time.Minute, log), st, sm, log)
-	h, err := New(cfg, BuildInfo{Version: "test"}, st, sm, sy, web.FS(), log).Handler()
+	server := New(cfg, BuildInfo{Version: "test"}, st, sm, sy, web.FS(), log)
+	for _, opt := range opts {
+		opt(server)
+	}
+	h, err := server.Handler()
 	if err != nil {
 		t.Fatal(err)
 	}

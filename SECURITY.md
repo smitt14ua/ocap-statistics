@@ -21,6 +21,11 @@ impact you expect. You should get an answer within a week.
 
 - Admin passwords are stored as PBKDF2-HMAC-SHA256 (600 000 iterations); session tokens are
   stored hashed and sent as `HttpOnly`, `SameSite=Strict` cookies (`__Host-` prefixed over HTTPS).
+- Steam sign-in (OpenID 2.0) accepts an answer only when Steam confirms its signature
+  (`check_authentication`), it comes from Steam's endpoint, signs the identity, return address
+  and nonce, is addressed to exactly the sign-in started by this browser (a state cookie), and
+  its nonce is fresh and unused. Player sessions are stored hashed, sent as `HttpOnly`,
+  `SameSite=Lax` cookies, grant no admin access, and only reveal the player's own Steam id.
 - Failed logins are rate limited per client address and per user name; password hashing is
   bounded so it cannot exhaust the CPU.
 - State-changing admin requests require a custom header (CSRF protection) and the admin API

@@ -121,6 +121,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 	expires_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS player_sessions (
+	token_hash TEXT PRIMARY KEY,
+	steam_id   TEXT    NOT NULL,
+	expires_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS meta (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL
@@ -187,7 +193,9 @@ func migrate(db *sql.DB) error {
 			}
 		}
 	}
-	return nil
+	// Indexes on columns that older databases get above.
+	_, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_mp_steam ON mission_players(steam_id) WHERE steam_id != ''`)
+	return err
 }
 
 // Generation identifies the current state of the statistics.

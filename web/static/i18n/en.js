@@ -382,4 +382,18 @@
   'feed.cause.vehicle.title': 'The recording names no killer: the victim died in the vehicle this player destroyed',
   'feed.cause.lastHit': 'last hit',
   'feed.cause.lastHit.title': 'The recording names no killer (suicide, drowning, a wreck): the kill goes to the enemy who hit the victim last',
+
+  'auth.signIn': 'Sign in with Steam',
+  'auth.signOut': 'Sign out',
+  'auth.profile': 'My profile',
+  'auth.failed': 'Could not sign in with Steam. Try again.',
+  'me.title': 'My statistics',
+  'me.you': 'you',
+  'me.yourSquad': 'your squad',
+  'me.rank': '#{n} of {total}',
+  'me.rankTitle': 'Place in the players table with its default sort',
+  'me.unranked': 'Not in the table: fewer than {n} missions',
+  'me.noGames': 'No missions with your Steam account yet. Players are recognised by the Steam id that recent OCAP versions save in recordings.',
+  'me.noneInPeriod': 'No counted missions in this period ({period}).',
+  'me.alsoAs': 'Also played as {names}',
 };

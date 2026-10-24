@@ -381,4 +381,18 @@
   'feed.cause.vehicle.title': 'Záznam neuvádí zabijáka: oběť zahynula ve vozidle, které tento hráč zničil',
   'feed.cause.lastHit': 'poslední zásah',
   'feed.cause.lastHit.title': 'Záznam neuvádí zabijáka (sebevražda, utonutí, vrak): zabití se připíše nepříteli, který oběť zasáhl naposledy',
+
+  'auth.signIn': 'Přihlásit přes Steam',
+  'auth.signOut': 'Odhlásit',
+  'auth.profile': 'Můj profil',
+  'auth.failed': 'Přihlášení přes Steam se nezdařilo. Zkuste to znovu.',
+  'me.title': 'Moje statistiky',
+  'me.you': 'vy',
+  'me.yourSquad': 'váš oddíl',
+  'me.rank': '#{n} z {total}',
+  'me.rankTitle': 'Pořadí v tabulce hráčů při výchozím řazení',
+  'me.unranked': 'Není v tabulce: méně než {n} misí',
+  'me.noGames': 'Zatím žádné mise s vaším účtem Steam. Hráči se rozpoznávají podle Steam ID, které novější verze OCAP ukládají do nahrávek.',
+  'me.noneInPeriod': 'V tomto období ({period}) žádné započítané mise.',
+  'me.alsoAs': 'Další jména: {names}',
 };
