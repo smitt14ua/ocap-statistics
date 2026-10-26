@@ -365,9 +365,9 @@ class Admin {
       players: [['kills', 'col.kills'], ['deaths', 'col.deaths'], ['teamKills', 'col.teamKills.title'], ['attendance', 'col.attendance'],
         ['accuracy', 'col.accuracy'], ['vehiclesDestroyed', 'col.vehicles.title'], ['killAssists', 'tile.assists'], ['medicalPoints', 'tile.medical'],
         ['kd', 'col.kd'], ['name', 'col.name'], ['squad', 'col.squad']],
-      squads: [['kills', 'col.kills'], ['deaths', 'col.deaths'], ['teamKills', 'col.teamKills.title'], ['attendance', 'col.attendance'],
-        ['accuracy', 'col.accuracy'], ['vehiclesDestroyed', 'col.vehicles.title'], ['killAssists', 'tile.assists'], ['medicalPoints', 'tile.medical'],
-        ['kd', 'col.kd'], ['players', 'col.players'], ['name', 'col.squad']],
+      squads: [['kills', 'col.kills'], ['deaths', 'col.deaths'], ['teamKills', 'col.teamKills.title'], ['attendance', 'col.avgAttendance'],
+        ['avgPlayers', 'col.avgPlayers'], ['accuracy', 'col.accuracy'], ['vehiclesDestroyed', 'col.vehicles.title'], ['killAssists', 'tile.assists'],
+        ['medicalPoints', 'tile.medical'], ['kd', 'col.kd'], ['players', 'col.players'], ['name', 'col.squad']],
     };
     const saved = (this.state && this.state.settings.columns) || [];
     for (const [table, fieldId, orderId] of [['players', 'sortPlayersField', 'sortPlayersOrder'], ['squads', 'sortSquadsField', 'sortSquadsOrder']]) {
@@ -437,7 +437,7 @@ class Admin {
   }
 
   renderVarList() {
-    const vars = ['kills', 'deaths', 'teamKills', 'vehiclesDestroyed', 'killAssists', 'shotsFired', 'hits', 'accuracy', 'kd', 'attendance', 'players', 'squadMissions', 'maxAttendance', 'missions', 'isSquad',
+    const vars = ['kills', 'deaths', 'teamKills', 'vehiclesDestroyed', 'killAssists', 'shotsFired', 'hits', 'accuracy', 'kd', 'attendance', 'players', 'squadMissions', 'avgPlayers', 'maxAttendance', 'missions', 'isSquad',
       'treatments', 'revives', 'medicalPoints'];
     $('varList').replaceChildren(...vars.flatMap(v => [el('dt', { class: 'mono' }, v), el('dd', {}, t(`var.${v}`))]));
   }

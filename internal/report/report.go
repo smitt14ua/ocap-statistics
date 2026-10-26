@@ -43,8 +43,9 @@ type Squad struct {
 	Name              string  `json:"name"` // "" for players without a squad
 	Players           int     `json:"players"`
 	Missions          int     `json:"missions"`
-	Attendance        int     `json:"attendance"` // player-missions
-	AvgAttendance     float64 `json:"avgAttendance"`
+	Attendance        int     `json:"attendance"`    // player-missions
+	AvgAttendance     float64 `json:"avgAttendance"` // missions per player
+	AvgPlayers        float64 `json:"avgPlayers"`    // players per mission the squad took part in
 	Kills             int     `json:"kills"`
 	Deaths            int     `json:"deaths"`
 	TeamKills         int     `json:"teamKills"`
@@ -240,6 +241,7 @@ func (r *Result) buildSquads(rows []store.Row, only func(string) bool) []Squad {
 		s.Missions = len(a.missions)
 		avg := float64(s.Attendance) / float64(max(s.Players, 1))
 		s.AvgAttendance = round2(avg)
+		s.AvgPlayers = round2(float64(s.Attendance) / float64(max(s.Missions, 1)))
 		s.Accuracy = accuracy(s.Hits, s.ShotsFired)
 		s.KD = round2(float64(s.Kills) / float64(max(s.Deaths, 1)))
 		s.MedicalPoints = r.medical.Points(s.Treatments, s.Revives)
@@ -446,6 +448,8 @@ func SortSquads(ss []Squad, field string, desc bool) {
 			return s.AvgAttendance
 		case "players":
 			return float64(s.Players)
+		case "avgPlayers":
+			return s.AvgPlayers
 		case "accuracy":
 			return s.Accuracy
 		case "kd":

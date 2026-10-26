@@ -23,7 +23,7 @@ const (
 // Sort fields accepted for players and squads, besides "custom.<column id>".
 var (
 	PlayerSortFields = []string{"kills", "deaths", "teamKills", "vehiclesDestroyed", "killAssists", "attendance", "accuracy", "kd", "shotsFired", "hits", "treatments", "revives", "medicalPoints", "name", "squad"}
-	SquadSortFields  = []string{"kills", "deaths", "teamKills", "vehiclesDestroyed", "killAssists", "attendance", "players", "accuracy", "kd", "score", "treatments", "revives", "medicalPoints", "name"}
+	SquadSortFields  = []string{"kills", "deaths", "teamKills", "vehiclesDestroyed", "killAssists", "attendance", "players", "avgPlayers", "accuracy", "kd", "score", "treatments", "revives", "medicalPoints", "name"}
 )
 
 // MaxColumns limits how many custom columns can be defined.
@@ -41,11 +41,12 @@ type Column struct {
 }
 
 // Variables are the names formulas can use. For squads, the statistics are the squad's
-// totals, attendance is its average attendance per player and squadMissions the missions
-// it took part in; for players, players is 1 and squadMissions equals attendance.
+// totals, attendance is its average attendance per player, squadMissions the missions it
+// took part in and avgPlayers its players per such mission; for players, players and
+// avgPlayers are 1 and squadMissions equals attendance.
 var Variables = []string{
 	"kills", "deaths", "teamkills", "vehiclesdestroyed", "killassists", "shotsfired", "hits",
-	"accuracy", "kd", "attendance", "players", "squadmissions",
+	"accuracy", "kd", "attendance", "players", "squadmissions", "avgplayers",
 	"maxattendance", "missions", "issquad", "treatments", "revives", "medicalpoints",
 }
 
@@ -116,7 +117,7 @@ func (r *Result) playerVars(p *Player, maxAtt float64) map[string]float64 {
 		"kills": float64(p.Kills), "deaths": float64(p.Deaths), "teamkills": float64(p.TeamKills),
 		"vehiclesdestroyed": float64(p.VehiclesDestroyed), "killassists": float64(p.KillAssists),
 		"shotsfired": float64(p.ShotsFired), "hits": float64(p.Hits), "accuracy": p.Accuracy, "kd": p.KD,
-		"attendance": float64(p.Attendance), "players": 1, "squadmissions": float64(p.Attendance),
+		"attendance": float64(p.Attendance), "players": 1, "squadmissions": float64(p.Attendance), "avgplayers": 1,
 		"maxattendance": maxAtt, "missions": float64(len(r.Missions)), "issquad": 0,
 		"treatments": float64(p.Treatments), "revives": float64(p.Revives), "medicalpoints": p.MedicalPoints,
 	}
@@ -128,7 +129,7 @@ func (r *Result) squadVars(s *Squad, maxAtt float64) map[string]float64 {
 		"vehiclesdestroyed": float64(s.VehiclesDestroyed), "killassists": float64(s.KillAssists),
 		"shotsfired": float64(s.ShotsFired), "hits": float64(s.Hits), "accuracy": s.Accuracy, "kd": s.KD,
 		"attendance": s.AvgAttendance, "players": float64(s.Players), "squadmissions": float64(s.Missions),
-		"maxattendance": maxAtt, "missions": float64(len(r.Missions)), "issquad": 1,
+		"avgplayers": s.AvgPlayers, "maxattendance": maxAtt, "missions": float64(len(r.Missions)), "issquad": 1,
 		"treatments": float64(s.Treatments), "revives": float64(s.Revives), "medicalpoints": s.MedicalPoints,
 	}
 }

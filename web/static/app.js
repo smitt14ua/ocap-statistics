@@ -414,6 +414,11 @@ class StatsApp {
     if (cols.length) $('summaryKD').after(el('td', { class: 'custom-col', colspan: cols.length }));
     $('nameHeader').textContent = t(squads ? 'col.squad' : 'col.name');
     $('squadHeader').textContent = t(squads ? 'col.players' : 'col.squad');
+    // Squads count missions per player and players per mission; the second column is theirs only.
+    $('attendanceHeader').textContent = t(squads ? 'col.avgAttendance' : 'col.attendance');
+    $('attendanceHeader').title = t(squads ? 'col.avgAttendance.title' : 'col.attendance.title');
+    $('avgPlayersHeader').hidden = !squads;
+    $('summaryMid').colSpan = squads ? 6 : 5;
     const ph = t(squads ? 'filters.searchSquads' : 'filters.searchPlayers');
     $('search').placeholder = ph;
     $('search').setAttribute('aria-label', ph);
@@ -519,10 +524,16 @@ class StatsApp {
       squads ? (x.name || t('noSquad')) : x.name,
       squads ? x.players : (x.squadRaw || '-'),
       x.kills, x.deaths, x.teamKills,
-      squads ? fmt(x.avgAttendance) : x.attendance,
+      ...(squads ? [fmt(this.attendanceRate(x)) + '%', fmt(x.avgPlayers)] : [x.attendance]),
       fmt(x.accuracy) + '%', x.vehiclesDestroyed, x.killAssists, this.medical(x), fmt(x.kd),
       ...this.columns(squads).map(c => this.customValue(x, c)),
     ];
+  }
+
+  // attendanceRate is the share of the period's missions an average player of the squad played.
+  attendanceRate(s) {
+    const missions = this.data.totals.missions;
+    return missions ? Math.round(s.avgAttendance / missions * 10000) / 100 : 0;
   }
 
   // medical shows medical points with the treatments and revives behind them as a tooltip.
@@ -562,7 +573,7 @@ class StatsApp {
       return tr;
     });
     if (!rows.length) {
-      rows.push(el('tr', {}, el('td', { colspan: 12 + this.columns(squads).length, class: 'muted' }, this.data ? t('table.empty') : t('status.loading'))));
+      rows.push(el('tr', {}, el('td', { colspan: (squads ? 13 : 12) + this.columns(squads).length, class: 'muted' }, this.data ? t('table.empty') : t('status.loading'))));
     }
     this.table.querySelector('tbody').replaceChildren(...rows);
   }
@@ -1079,7 +1090,7 @@ class StatsApp {
 
   headerLabels(squads) {
     return [...['col.rank', squads ? 'col.squad' : 'col.name', squads ? 'col.players' : 'col.squad', 'col.kills', 'col.deaths',
-      'col.teamKills', 'col.attendance', 'col.accuracy', 'col.vehicles', 'col.assists', 'col.medical', 'col.kd'].map(k => t(k)),
+      'col.teamKills', ...(squads ? ['col.avgAttendance', 'col.avgPlayers'] : ['col.attendance']), 'col.accuracy', 'col.vehicles', 'col.assists', 'col.medical', 'col.kd'].map(k => t(k)),
     ...this.columns(squads).map(c => c.name)];
   }
 
@@ -1088,10 +1099,11 @@ class StatsApp {
     const squads = this.viewMode === 'squads';
     const custom = (x) => this.columns(squads).map(c => (x.custom && x.custom[c.id] !== null && x.custom[c.id] !== undefined ? x.custom[c.id] : ''));
     const rows = this.items().map((x, i) => squads
-      ? [i + 1, x.name || t('noSquad'), x.players, x.kills, x.deaths, x.teamKills, x.avgAttendance, x.accuracy, x.vehiclesDestroyed, x.killAssists, x.medicalPoints, x.kd, ...custom(x)]
+      ? [i + 1, x.name || t('noSquad'), x.players, x.kills, x.deaths, x.teamKills, this.attendanceRate(x), x.avgPlayers, x.accuracy, x.vehiclesDestroyed, x.killAssists, x.medicalPoints, x.kd, ...custom(x)]
       : [i + 1, x.name, x.squadRaw || '-', x.kills, x.deaths, x.teamKills, x.attendance, x.accuracy, x.vehiclesDestroyed, x.killAssists, x.medicalPoints, x.kd, ...custom(x)]);
     const sheet = t(squads ? 'xls.squads' : 'xls.players');
-    const blob = window.xlsx.workbook(sheet, this.headerLabels(squads), rows, [5, 22, 14, 10, 10, 8, 13, 13, 8, 8, 8, 8]);
+    const widths = [5, 22, 14, 10, 10, 8, ...(squads ? [16, 16] : [10]), 13, 8, 8, 8, 8];
+    const blob = window.xlsx.workbook(sheet, this.headerLabels(squads), rows, widths);
     const url = URL.createObjectURL(blob);
     const a = el('a', { href: url, download: `${sheet}_${this.periodText().replace(/[^\d-]+/g, '_')}.xlsx` });
     document.body.append(a);

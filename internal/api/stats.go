@@ -559,10 +559,10 @@ func (s *Server) squads(r *http.Request) (response, error) {
 			}
 			rows = append(rows, []string{fi(p.offset + i + 1), name, fi(sq.Players), fi(sq.Kills), fi(sq.Deaths), fi(sq.TeamKills),
 				ff(sq.AvgAttendance), ff(sq.Accuracy), fi(sq.VehiclesDestroyed), fi(sq.KillAssists), ff(sq.KD),
-				fi(sq.Treatments), fi(sq.Revives), ff(sq.MedicalPoints)})
+				fi(sq.Treatments), fi(sq.Revives), ff(sq.MedicalPoints), fi(sq.Missions), ff(sq.AvgPlayers)})
 		}
 		header := []string{"rank", "squad", "players", "kills", "deaths", "team_kills", "avg_attendance", "accuracy", "vehicles_destroyed", "kill_assists", "kd",
-			"treatments", "revives", "medical_points"}
+			"treatments", "revives", "medical_points", "missions", "avg_players"}
 		header, rows = s.withCustomCSV(header, rows, report.TargetPlayers, func(i int) map[string]*float64 { return list[i].Custom })
 		return csvResponse("squads.csv", header, rows)
 	}

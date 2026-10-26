@@ -75,6 +75,10 @@ func TestHide(t *testing.T) {
 	if r.Squads[0].Kills != 4 || r.Squads[0].Players != 2 {
 		t.Errorf("ALPHA lost the missions of a hidden player: %+v", r.Squads[0])
 	}
+	// ALPHA: 4 player-missions by 2 players over 3 missions.
+	if s := r.Squads[0]; s.AvgAttendance != 2 || s.AvgPlayers != 1.33 {
+		t.Errorf("ALPHA missions per player %v, players per mission %v, want 2 and 1.33", s.AvgAttendance, s.AvgPlayers)
+	}
 	if _, ok := r.FindPlayer("Newbie"); !ok {
 		t.Error("hidden player not found")
 	}

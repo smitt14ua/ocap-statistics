@@ -1075,7 +1075,12 @@
             "description": "Sum of player-missions"
           },
           "avgAttendance": {
-            "type": "number"
+            "type": "number",
+            "description": "Missions per player of the squad"
+          },
+          "avgPlayers": {
+            "type": "number",
+            "description": "Players of the squad per mission it took part in"
           },
           "kills": {
             "type": "integer"
