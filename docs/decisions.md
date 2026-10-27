@@ -8,7 +8,7 @@ Format: **Decision** — context and reasons — consequences.
 
 OCAP recordings are large JSON files (megabytes to gigabytes) on a server that also serves replays. Computing statistics from them on every request would load OCAP and be slow. Each recording is therefore read once by the syncer, and every API and page request is answered from SQLite.
 
-Consequences: statistics lag OCAP by the sync interval; the syncer must be robust (retries with back-off, `missing` status for recordings that return 404 everywhere, so they are not retried forever).
+Consequences: statistics lag OCAP by the sync interval; the syncer must be robust (retries with back-off, `missing` status for recordings that return 404 everywhere, so they are not retried forever; they are retried only when OCAP reports a different conversion status for them). Recordings OCAP is still receiving over its WebSocket ingest (`streaming`) are not taken until they are saved, as they have no file yet.
 
 ## 2. Keep a compact digest of each recording, with versions
 

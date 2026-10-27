@@ -30,6 +30,7 @@ import (
 type fakeOCAP struct {
 	mu        sync.Mutex
 	ops       []ocap.Operation
+	absent    map[string]bool // filenames without a data file (404)
 	recording []byte
 	downloads atomic.Int32
 }
@@ -49,6 +50,13 @@ func (f *fakeOCAP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(out)
 	case strings.HasPrefix(r.URL.Path, "/data/"):
 		f.downloads.Add(1)
+		f.mu.Lock()
+		absent := f.absent[strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/data/"), ".json.gz")]
+		f.mu.Unlock()
+		if absent {
+			http.NotFound(w, r)
+			return
+		}
 		var buf bytes.Buffer
 		zw := gzip.NewWriter(&buf)
 		_, _ = zw.Write(f.recording)
@@ -280,6 +288,92 @@ func TestSyncAndAPI(t *testing.T) {
 	get(t, h, "/api/v1/stats", &stats)
 	if stats.Totals.Missions != 1 {
 		t.Errorf("after deletion: %+v", stats.Totals)
+	}
+}
+
+func TestLiveRecording(t *testing.T) {
+	fake, sy, h := setup(t)
+	missions := func() int {
+		t.Helper()
+		var stats struct{ Totals struct{ Missions int } }
+		get(t, h, "/api/v1/stats", &stats)
+		return stats.Totals.Missions
+	}
+	// OCAP lists a mission recorded over its WebSocket ingest from the start, without a file.
+	fake.mu.Lock()
+	fake.ops = append(fake.ops, ocap.Operation{ID: 4, Filename: "Coop_3_live", MissionName: "Coop_3", WorldName: "altis",
+		Date: "2026-10-04", Tag: "COOP", ConversionStatus: ocap.StatusStreaming})
+	fake.absent = map[string]bool{"Coop_3_live": true}
+	fake.mu.Unlock()
+	runSync(t, sy)
+	if n := missions(); n != 2 {
+		t.Errorf("while recording: %d missions", n)
+	}
+	if n := fake.downloads.Load(); n != 2 {
+		t.Errorf("a live recording was requested: %d downloads", n)
+	}
+
+	// Saved: the file exists and the status changes.
+	fake.mu.Lock()
+	fake.ops[3].ConversionStatus = "completed"
+	fake.absent = nil
+	fake.mu.Unlock()
+	runSync(t, sy)
+	if n := missions(); n != 3 {
+		t.Errorf("after saving: %d missions", n)
+	}
+
+	// A file that was missing (as older versions marked live recordings) is retried once the
+	// OCAP status changes, and not before.
+	fake.mu.Lock()
+	fake.ops = append(fake.ops, ocap.Operation{ID: 5, Filename: "Coop_4", MissionName: "Coop_4", WorldName: "altis",
+		Date: "2026-10-05", Tag: "COOP", ConversionStatus: "pending"})
+	fake.absent = map[string]bool{"Coop_4": true}
+	fake.mu.Unlock()
+	runSync(t, sy)
+	fake.mu.Lock()
+	fake.absent = nil
+	fake.mu.Unlock()
+	runSync(t, sy)
+	if n := missions(); n != 3 {
+		t.Errorf("missing recording counted before its status changed: %d missions", n)
+	}
+	fake.mu.Lock()
+	fake.ops[4].ConversionStatus = "completed"
+	fake.mu.Unlock()
+	runSync(t, sy)
+	if n := missions(); n != 4 {
+		t.Errorf("missing recording not retried: %d missions", n)
+	}
+
+	// OCAP deletes a live mission its producer discards (too short, too few players) and a
+	// failed one once the discard is repeated; neither stays behind here.
+	admin := login(t, h, "admin", "secret-password")
+	counts := func() store.Counts {
+		t.Helper()
+		var state struct{ Missions store.Counts }
+		if err := json.Unmarshal(admin.do(http.MethodGet, "/api/admin/state", nil).Body.Bytes(), &state); err != nil {
+			t.Fatal(err)
+		}
+		state.Missions.LastFetched = time.Time{}
+		return state.Missions
+	}
+	fake.mu.Lock()
+	fake.ops = append(fake.ops,
+		ocap.Operation{ID: 6, Filename: "Coop_5_live", MissionName: "Coop_5", Date: "2026-10-06", Tag: "COOP", ConversionStatus: ocap.StatusStreaming},
+		ocap.Operation{ID: 7, Filename: "Coop_6_failed", MissionName: "Coop_6", Date: "2026-10-06", Tag: "COOP", ConversionStatus: "failed"})
+	fake.absent = map[string]bool{"Coop_5_live": true, "Coop_6_failed": true}
+	fake.mu.Unlock()
+	runSync(t, sy)
+	if c := counts(); c != (store.Counts{Total: 5, Done: 4, Missing: 1}) {
+		t.Errorf("live and failed recordings listed: %+v", c)
+	}
+	fake.mu.Lock()
+	fake.ops = fake.ops[:5]
+	fake.mu.Unlock()
+	runSync(t, sy)
+	if c := counts(); c != (store.Counts{Total: 4, Done: 4}) {
+		t.Errorf("after OCAP deleted them: %+v", c)
 	}
 }
 

@@ -39,6 +39,14 @@ type Operation struct {
 	ConversionStatus string  `json:"conversionStatus"`
 }
 
+// StatusStreaming is the conversion status of a recording that OCAP is still receiving over
+// its WebSocket ingest. OCAP lists it from the mission start, but writes its data file only
+// when the mission ends.
+const StatusStreaming = "streaming"
+
+// Live reports whether OCAP is still recording the operation, so it has no data file yet.
+func (o Operation) Live() bool { return o.ConversionStatus == StatusStreaming }
+
 // Day returns the recording date as YYYY-MM-DD.
 func (o Operation) Day() string {
 	if len(o.Date) >= 10 {

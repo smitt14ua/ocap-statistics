@@ -22,8 +22,8 @@ const (
 	StatusPending = "pending"
 	StatusDone    = "done"
 	StatusError   = "error"
-	// StatusMissing marks recordings whose data file OCAP no longer has. They are not
-	// retried automatically.
+	// StatusMissing marks recordings whose data file OCAP no longer has. They are retried
+	// only when OCAP lists them with another conversion status.
 	StatusMissing = "missing"
 )
 
@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS missions (
 	date            TEXT    NOT NULL DEFAULT '',
 	tag             TEXT    NOT NULL DEFAULT '',
 	ocap_duration   REAL    NOT NULL DEFAULT 0,
-	status          TEXT    NOT NULL DEFAULT 'pending',
+	ocap_status     TEXT    NOT NULL DEFAULT '', -- conversion status listed by OCAP
+	status         TEXT    NOT NULL DEFAULT 'pending',
 	attempts        INTEGER NOT NULL DEFAULT 0,
 	last_error      TEXT    NOT NULL DEFAULT '',
 	next_attempt_at INTEGER NOT NULL DEFAULT 0,
@@ -182,6 +183,8 @@ func migrate(db *sql.DB) error {
 		{"mission_players", "treatments", "INTEGER NOT NULL DEFAULT 0"},
 		{"mission_players", "revives", "INTEGER NOT NULL DEFAULT 0"},
 		{"mission_players", "steam_id", "TEXT NOT NULL DEFAULT ''"},
+		// Empty in older databases, so failed and missing recordings are retried once.
+		{"missions", "ocap_status", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		var n int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&n); err != nil {
@@ -213,16 +216,19 @@ type OperationMeta struct {
 	Date         string
 	Tag          string
 	OCAPDuration float64
+	OCAPStatus   string // conversion status
 }
 
 // UpsertOperations inserts new recordings as pending and refreshes metadata of known ones.
-// It returns the number of newly inserted recordings.
+// Failed and missing recordings are retried when their OCAP status changes: a file OCAP did
+// not have may exist once it has finished recording or converting. It returns the number of
+// newly inserted recordings.
 func (s *Store) UpsertOperations(ctx context.Context, ops []OperationMeta) (int, error) {
 	known, err := s.operationMetas(ctx)
 	if err != nil {
 		return 0, err
 	}
-	var inserts, refetches, updates []OperationMeta
+	var inserts, refetches, retries, updates []OperationMeta
 	for _, op := range ops {
 		old, ok := known[op.ID]
 		switch {
@@ -230,11 +236,14 @@ func (s *Store) UpsertOperations(ctx context.Context, ops []OperationMeta) (int,
 			inserts = append(inserts, op)
 		case old.Filename != op.Filename:
 			refetches = append(refetches, op) // a different file under the same id
-		case old.MissionName != op.MissionName || old.WorldName != op.WorldName || old.Date != op.Date || old.Tag != op.Tag:
+		case old.OCAPStatus != op.OCAPStatus && (old.status == StatusError || old.status == StatusMissing):
+			retries = append(retries, op)
+		case old.MissionName != op.MissionName || old.WorldName != op.WorldName || old.Date != op.Date ||
+			old.Tag != op.Tag || old.OCAPStatus != op.OCAPStatus:
 			updates = append(updates, op)
 		}
 	}
-	if len(inserts)+len(refetches)+len(updates) == 0 {
+	if len(inserts)+len(refetches)+len(retries)+len(updates) == 0 {
 		return 0, nil
 	}
 
@@ -247,10 +256,12 @@ func (s *Store) UpsertOperations(ctx context.Context, ops []OperationMeta) (int,
 		sql string
 		ops []OperationMeta
 	}{
-		{`INSERT INTO missions (mission_name, world_name, date, tag, ocap_duration, filename, id) VALUES (?, ?, ?, ?, ?, ?, ?)`, inserts},
-		{`UPDATE missions SET mission_name = ?, world_name = ?, date = ?, tag = ?, ocap_duration = ?, filename = ?,
+		{`INSERT INTO missions (mission_name, world_name, date, tag, ocap_duration, filename, ocap_status, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, inserts},
+		{`UPDATE missions SET mission_name = ?, world_name = ?, date = ?, tag = ?, ocap_duration = ?, filename = ?, ocap_status = ?,
 			status = 'pending', attempts = 0, next_attempt_at = 0, digest = NULL WHERE id = ?`, refetches},
-		{`UPDATE missions SET mission_name = ?, world_name = ?, date = ?, tag = ?, ocap_duration = ?, filename = ? WHERE id = ?`, updates},
+		{`UPDATE missions SET mission_name = ?, world_name = ?, date = ?, tag = ?, ocap_duration = ?, filename = ?, ocap_status = ?,
+			status = 'pending', attempts = 0, next_attempt_at = 0 WHERE id = ?`, retries},
+		{`UPDATE missions SET mission_name = ?, world_name = ?, date = ?, tag = ?, ocap_duration = ?, filename = ?, ocap_status = ? WHERE id = ?`, updates},
 	} {
 		if len(q.ops) == 0 {
 			continue
@@ -260,7 +271,7 @@ func (s *Store) UpsertOperations(ctx context.Context, ops []OperationMeta) (int,
 			return 0, err
 		}
 		for _, op := range q.ops {
-			if _, err := stmt.ExecContext(ctx, op.MissionName, op.WorldName, op.Date, op.Tag, op.OCAPDuration, op.Filename, op.ID); err != nil {
+			if _, err := stmt.ExecContext(ctx, op.MissionName, op.WorldName, op.Date, op.Tag, op.OCAPDuration, op.Filename, op.OCAPStatus, op.ID); err != nil {
 				stmt.Close()
 				return 0, err
 			}
@@ -276,16 +287,22 @@ func (s *Store) UpsertOperations(ctx context.Context, ops []OperationMeta) (int,
 	return len(inserts), nil
 }
 
-func (s *Store) operationMetas(ctx context.Context) (map[int64]OperationMeta, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, filename, mission_name, world_name, date, tag FROM missions`)
+// knownMission is a stored recording's metadata and status.
+type knownMission struct {
+	OperationMeta
+	status string
+}
+
+func (s *Store) operationMetas(ctx context.Context) (map[int64]knownMission, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, filename, mission_name, world_name, date, tag, ocap_status, status FROM missions`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[int64]OperationMeta{}
+	out := map[int64]knownMission{}
 	for rows.Next() {
-		var m OperationMeta
-		if err := rows.Scan(&m.ID, &m.Filename, &m.MissionName, &m.WorldName, &m.Date, &m.Tag); err != nil {
+		var m knownMission
+		if err := rows.Scan(&m.ID, &m.Filename, &m.MissionName, &m.WorldName, &m.Date, &m.Tag, &m.OCAPStatus, &m.status); err != nil {
 			return nil, err
 		}
 		out[m.ID] = m

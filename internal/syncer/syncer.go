@@ -269,7 +269,7 @@ func (s *Syncer) sync(ctx context.Context) (processed, failed int, err error) {
 		keep[op.ID] = true
 		metas = append(metas, store.OperationMeta{
 			ID: op.ID, Filename: op.Filename, MissionName: op.MissionName, WorldName: op.WorldName,
-			Date: op.Day(), Tag: op.Tag, OCAPDuration: op.MissionDuration,
+			Date: op.Day(), Tag: op.Tag, OCAPDuration: op.MissionDuration, OCAPStatus: op.ConversionStatus,
 		})
 	}
 	added, err := s.store.UpsertOperations(ctx, metas)
@@ -327,7 +327,8 @@ func (s *Syncer) listOperations(ctx context.Context, tags []string, since string
 			if tag != "" && !strings.EqualFold(op.Tag, tag) {
 				continue
 			}
-			if op.Filename == "" || seen[op.ID] {
+			// A mission still being recorded has no file yet; it is taken once OCAP saves it.
+			if op.Filename == "" || op.Live() || seen[op.ID] {
 				continue
 			}
 			seen[op.ID] = true
