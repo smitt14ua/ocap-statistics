@@ -137,6 +137,10 @@
   'n.nothingToCopy': 'Není co kopírovat',
   'n.copyFailed': 'Kopírování se nezdařilo, zkuste jiný prohlížeč',
   'n.top10Copied': 'Snímek TOP 10 zkopírován do schránky',
+  'n.cardCopied': 'Karta zkopírována do schránky: vložte ji do chatu',
+  'n.linkCopied': 'Odkaz zkopírován: chaty zobrazí jeho náhled',
+  'btn.copyCard': 'Kopírovat kartu',
+  'btn.copyLink': 'Kopírovat odkaz',
   'n.rotationCopied': 'Zpráva o rotaci zkopírována do schránky',
 
   'rep.top10Players': 'TOP 10 hráčů',

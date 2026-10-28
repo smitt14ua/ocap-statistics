@@ -278,6 +278,7 @@ class StatsApp {
     await this.load();
     if (params.get('login') === 'failed') this.toast(t('n.error'), t('auth.failed'), true);
     if (/^\d+$/.test(mission || '')) this.openMission(mission);
+    else if (params.get('player')) this.openPlayer(params.get('player'));
   }
 
   bind() {
@@ -380,9 +381,38 @@ class StatsApp {
       url.searchParams.set('period', period);
     }
     if (this.viewMode === 'squads') url.searchParams.set('view', 'squads');
-    // An open mission is part of the address, so the link can be shared.
-    if (this.detailView && this.detailView.missionId) url.searchParams.set('mission', this.detailView.missionId);
+    // An open mission or player is part of the address, so the link can be shared.
+    for (const [k, v] of Object.entries((this.detailView && this.detailView.link) || {})) url.searchParams.set(k, v);
     history.replaceState(null, '', url);
+  }
+
+  // shareURL is a link to what the detail view shows, for the period on screen and with the
+  // page language, which the server uses for the link preview in chats.
+  shareURL() {
+    const url = new URL(location.href);
+    url.search = '';
+    for (const id of ['from', 'to']) if ($(id).value) url.searchParams.set(id, $(id).value);
+    for (const [k, v] of Object.entries(this.detailView.link || {})) url.searchParams.set(k, v);
+    url.searchParams.set('lang', window.i18n.lang);
+    return url.href;
+  }
+
+  async copyLink(button) {
+    try {
+      await navigator.clipboard.writeText(this.shareURL());
+      this.toast(t('n.success'), t('n.linkCopied'));
+    } catch {
+      this.toast(t('n.error'), t('n.copyFailed'), true);
+    }
+    button.focus();
+  }
+
+  // shareBar offers a link to the view and a picture of card() for chats.
+  shareBar(card) {
+    const image = el('button', { type: 'button', class: 'small' }, t('btn.copyCard'));
+    image.addEventListener('click', () => this.capture(card(), image, 'n.cardCopied'));
+    return el('div', { class: 'share-bar' },
+      el('button', { type: 'button', class: 'small', onclick: (e) => this.copyLink(e.currentTarget) }, t('btn.copyLink')), image);
   }
 
   async load() {
@@ -854,10 +884,10 @@ class StatsApp {
   // showDetail shows a view in the detail modal. A view opened from another one (missions →
   // mission → player …) keeps that one on a stack, and Back returns to it. The loader gets the
   // view object, where it may keep state (the open tab) and update the title.
-  showDetail(title, loader, missionId = null) {
+  showDetail(title, loader, link = null) {
     const open = $('detailModal').classList.contains('open') && this.detailView;
     this.detailStack = open ? [...this.detailStack, this.detailView] : [];
-    this.detailView = { title, loader, missionId };
+    this.detailView = { title, loader, link };
     this.renderDetail();
   }
 
@@ -885,6 +915,7 @@ class StatsApp {
     // Another view may have been opened while this one was loading.
     if (this.detailView !== view) return;
     $('detailTitle').textContent = view.title;
+    this.updateURL(); // the loader may have changed the link (a player's current name)
     // Loaders may return nested arrays and null for parts they leave out.
     $('detailBody').replaceChildren(...body.flat().filter(n => n !== null && n !== undefined && n !== false));
   }
@@ -893,10 +924,13 @@ class StatsApp {
     this.showDetail(name, async (view) => {
       const d = await apiGet(`players/${encodeURIComponent(name)}?${this.query()}`);
       const p = d.player, lk = d.longestKill;
-      view.title = p.name; // an older name of a player opens it under its current one
+      // An older name of a player opens it under its current one.
+      view.title = p.name;
+      view.link = { player: p.name };
       return [
         el('p', { class: 'subtitle' }, [p.squadRaw ? `[${p.squadRaw}]` : null, this.range, t('detail.firstLast', { first: p.firstSeen, last: p.lastSeen })].filter(Boolean).join(' · ')),
         p.aliases && p.aliases.length ? el('p', { class: 'subtitle' }, t('me.alsoAs', { names: p.aliases.join(', ') })) : null,
+        this.shareBar(() => this.playerCard(d)),
         this.tiles([
           ['col.kills', p.kills], ['col.deaths', p.deaths], ['col.teamKills.title', p.teamKills], ['col.vehicles.title', p.vehiclesDestroyed],
           ['tile.assists', p.killAssists], ['col.kd', fmt(p.kd)], ['col.accuracy', fmt(p.accuracy)], ['tile.missions', p.attendance],
@@ -917,7 +951,7 @@ class StatsApp {
             el('td', {}, m.kills), el('td', {}, m.deaths), el('td', {}, m.teamKills), el('td', {}, m.vehiclesDestroyed), el('td', {}, m.killAssists),
             el('td', {}, this.medical(m))))),
       ];
-    });
+    }, { player: name });
   }
 
   // trend shows a player's months over all time: missions, kills per mission and K/D, each
@@ -1053,7 +1087,7 @@ class StatsApp {
       const d = await apiGet(`missions/${encodeURIComponent(id)}`);
       view.title = d.mission.name;
       return this.missionBody(d, view);
-    }, String(id));
+    }, { mission: String(id) });
   }
 
   missionBody(d, view) {
@@ -1087,6 +1121,7 @@ class StatsApp {
     });
     return [
       el('p', { class: 'subtitle' }, [m.date, m.world, fmtDuration(m.duration), m.tag, m.author && t('mission.author', { a: m.author })].filter(Boolean).join(' · ')),
+      this.shareBar(() => this.missionCard(d)),
       el('div', { class: 'mission-head' },
         el('div', { class: 'result' }, m.endSide
           ? [el('span', {}, sideDot(m.endSide), el('b', {}, t('mission.winner', { side: m.endSide }))), m.endMessage ? el('span', { class: 'muted' }, m.endMessage) : null]
@@ -1288,7 +1323,9 @@ class StatsApp {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  reportShell(title, footer) {
+  // reportShell is the frame of a picture: title, logo, a corner caption (the period by
+  // default) and a footer to append last.
+  reportShell(title, footer, corner = [t('rep.period'), this.range]) {
     const box = el('div', {
       style: 'position:absolute;left:-9999px;top:0;width:1080px;padding:40px;border-radius:16px;border:1px solid #333;' +
         "background:linear-gradient(145deg,#1a1a1a,#0d0d0d);font-family:'Inter',sans-serif;color:#eee",
@@ -1299,8 +1336,8 @@ class StatsApp {
     box.append(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:36px;padding-bottom:20px;border-bottom:2px solid rgba(72,187,120,.5)' },
       left,
       el('div', { style: 'text-align:right' },
-        el('p', { style: 'color:#666;margin:0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px' }, t('rep.period')),
-        el('p', { style: 'color:#fff;margin:5px 0 0;font-size:20px;font-weight:700' }, this.range))));
+        el('p', { style: 'color:#666;margin:0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px' }, corner[0]),
+        el('p', { style: 'color:#fff;margin:5px 0 0;font-size:20px;font-weight:700' }, corner[1]))));
     const foot = el('div', { style: 'margin-top:30px;display:flex;justify-content:space-between;border-top:1px solid #333;padding-top:14px;font-size:11px' },
       el('span', { style: 'color:#555;font-weight:700;letter-spacing:1px' }, footer),
       el('span', { style: 'color:#666' }, new Date().toLocaleString(window.i18n.lang)));
@@ -1359,6 +1396,65 @@ class StatsApp {
           }));
       }))), foot);
     this.capture(box, $('copyTop10'), 'n.top10Copied');
+  }
+
+  // cardTiles is the grid of big numbers of a card: [label, value, accent].
+  cardTiles(items) {
+    return el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:14px' }, items.map(([label, value, accent]) =>
+      el('div', { style: 'background:rgba(255,255,255,.03);border-radius:12px;padding:18px 20px;border-bottom:3px solid ' + (accent ? '#48bb78' : '#333') },
+        el('div', { style: `color:${accent ? '#48bb78' : '#fff'};font-size:40px;font-weight:900;line-height:1.1` }, value),
+        el('div', { style: 'color:#888;margin-top:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px' }, label))));
+  }
+
+  cardFooter() {
+    return (this.cfg.title || 'OCAP Statistics').toUpperCase();
+  }
+
+  // playerCard is the picture of a player's profile for chats.
+  playerCard(d) {
+    const p = d.player, lk = d.longestKill;
+    // The squad tag goes before the name, as in the game.
+    const name = p.squadRaw ? `[${p.squadRaw}] ${p.name}` : p.name;
+    const { box, foot } = this.reportShell(name, this.cardFooter());
+    const line = (text) => el('p', { style: 'color:#aaa;margin:0 0 8px;font-size:16px' }, text);
+    // append() would show a null as text.
+    box.append(...[
+      line(t('detail.firstLast', { first: p.firstSeen, last: p.lastSeen })),
+      p.aliases && p.aliases.length ? line(t('me.alsoAs', { names: p.aliases.join(', ') })) : null,
+      el('div', { style: 'height:16px' }),
+      this.cardTiles([
+        [t('col.kills'), p.kills], [t('col.deaths'), p.deaths], [t('col.kd'), fmt(p.kd), true], [t('tile.assists'), p.killAssists],
+        [t('col.vehicles.title'), p.vehiclesDestroyed], [t('tile.missions'), p.attendance], [t('col.accuracy'), fmt(p.accuracy)], [t('tile.medical'), fmtPoints(p.medicalPoints)],
+      ]),
+      el('div', { style: 'margin-top:22px;display:flex;flex-direction:column;gap:6px' },
+        lk ? line(t('detail.longestKill', { d: Math.round(lk.distance), victim: lk.victim, weapon: lk.weapon, date: lk.date })) : null,
+        d.weapons.length ? line(`${t('list.weapons')}: ${d.weapons.slice(0, 3).map(w => w.name).join(', ')}`) : null),
+      foot].filter(Boolean));
+    return box;
+  }
+
+  // missionCard is the picture of a mission's result for chats.
+  missionCard(d) {
+    const m = d.mission;
+    const { box, foot } = this.reportShell(m.name, this.cardFooter(), [t('col.date'), m.date]);
+    const players = [...d.players].sort((a, b) => b.kills - a.kills || b.killAssists - a.killAssists || a.name.localeCompare(b.name));
+    const sum = (f) => players.reduce((s, p) => s + p[f], 0);
+    const dot = (side) => el('span', { style: `display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:10px;background:${SIDE_COLORS[side] || '#888'}` });
+    const th = (s, right) => el('th', { style: `color:#48bb78;text-align:${right ? 'right' : 'left'};padding:10px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #333` }, s);
+    const td = (s, style = '') => el('td', { style: 'padding:10px;font-size:15px;color:#eee;' + style }, s);
+    box.append(
+      el('p', { style: 'color:#aaa;margin:0 0 18px;font-size:16px' }, [m.world, fmtDuration(m.duration), m.author && t('mission.author', { a: m.author })].filter(Boolean).join(' · ')),
+      el('div', { style: 'margin-bottom:22px;font-size:26px;font-weight:800;color:#fff;display:flex;align-items:center' },
+        m.endSide ? [dot(m.endSide), t('mission.winner', { side: m.endSide }), m.endMessage ? el('span', { style: 'margin-left:14px;font-size:18px;font-weight:400;color:#aaa' }, m.endMessage) : null]
+          : el('span', { style: 'color:#aaa' }, t('mission.noWinner'))),
+      this.cardTiles([[t('col.players'), players.length], [t('col.kills'), sum('kills'), true], [t('col.deaths'), sum('deaths')], [t('tile.assists'), sum('killAssists')]]),
+      el('table', { style: 'width:100%;border-collapse:collapse;margin-top:24px' },
+        el('thead', {}, el('tr', {}, th(t('col.name')), th(t('col.squad')), th(t('col.side')), th(t('col.k'), true), th(t('col.d'), true), th(t('col.assists'), true))),
+        el('tbody', {}, players.slice(0, 5).map((p, i) => el('tr', { style: `background:${i % 2 ? 'transparent' : 'rgba(255,255,255,.02)'}` },
+          td(p.name, 'font-weight:700;color:#fff'), td(p.squadRaw || '-'), td([dot(p.side), p.side]),
+          td(p.kills, 'text-align:right;font-weight:800;color:#48bb78'), td(p.deaths, 'text-align:right'), td(p.killAssists, 'text-align:right'))))),
+      foot);
+    return box;
   }
 
   copyRotation() {

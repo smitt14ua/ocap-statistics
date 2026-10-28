@@ -137,6 +137,10 @@
   'n.nothingToCopy': 'Nie ma czego kopiować',
   'n.copyFailed': 'Nie udało się skopiować, spróbuj innej przeglądarki',
   'n.top10Copied': 'Zrzut TOP 10 skopiowano do schowka',
+  'n.cardCopied': 'Kartę skopiowano do schowka: wklej ją do czatu',
+  'n.linkCopied': 'Link skopiowany: czaty pokażą jego podgląd',
+  'btn.copyCard': 'Kopiuj kartę',
+  'btn.copyLink': 'Kopiuj link',
   'n.rotationCopied': 'Raport rotacji skopiowano do schowka',
 
   'rep.top10Players': 'TOP 10 graczy',

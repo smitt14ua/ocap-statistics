@@ -476,6 +476,40 @@ func TestSquadMatrix(t *testing.T) {
 	}
 }
 
+func TestSharePreview(t *testing.T) {
+	_, sy, h := setup(t)
+	runSync(t, sy)
+	page := func(url, acceptLang string) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req.Header.Set("Accept-Language", acceptLang)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Security-Policy") == "" {
+			t.Fatalf("GET %s: %d, CSP %q", url, rec.Code, rec.Header().Get("Content-Security-Policy"))
+		}
+		return rec.Body.String()
+	}
+	body := page("/?player=Smith&lang=uk", "de")
+	for _, want := range []string{`<meta property="og:title" content="[MILF] Smith — `, `Весь час · Місій: 2 · Вбивства: 6 · Смерті: 2 · K/D: 3.00`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("player preview lacks %q:\n%s", want, body[:min(len(body), 1200)])
+		}
+	}
+	body = page("/?mission=1", "de-DE,de;q=0.9")
+	if !strings.Contains(body, `<meta property="og:title" content="Coop_1 — `) || !strings.Contains(body, "2026-10-01 · altis · 21 min 40 s") ||
+		!strings.Contains(body, "Blufor wins") {
+		t.Errorf("mission preview:\n%s", body[:min(len(body), 1200)])
+	}
+	if body := page("/?player=Nobody", ""); strings.Contains(body, "og:title") || !strings.Contains(body, "<title>") {
+		t.Errorf("unknown player got a preview")
+	}
+	tags := string(previewTags("Site", `"><script>x</script>`, "a & b", "javascript:alert(1)"))
+	if strings.Contains(tags, "<script>") || !strings.Contains(tags, "a &amp; b") || strings.Contains(tags, "og:image") {
+		t.Errorf("tags not escaped: %s", tags)
+	}
+}
+
 func TestSyncRequiresToken(t *testing.T) {
 	_, _, h := setup(t)
 	rec := httptest.NewRecorder()

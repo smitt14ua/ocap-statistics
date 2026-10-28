@@ -16,6 +16,7 @@ OCAP ──(every 10 min: list of recordings)──► ocap-stats ──► SQLi
 - **Squads from nicknames.** `[ALPHA] John` is player `John` in squad `ALPHA`; recruits (`[~ALPHA~] John`) count in their squad like everyone else. The nickname format, squad aliases and ignored names are configurable.
 - **REST API** with OpenAPI documentation at `/api/docs`, CSV export, ETag caching and CORS.
 - **Web page** with filters, player/squad views, Excel export, top-10 and rotation screenshots to the clipboard and links to the replays in OCAP.
+- **Sharing:** a player's profile and a mission have a link (`?player=…`, `?mission=…`) that Discord, Telegram and other chats preview with the name and key numbers, in the language of whoever copied it, and a "Copy card" button that puts a picture of them on the clipboard.
 - **Custom columns:** define your own columns with spreadsheet-like formulas in the admin panel (e.g. `round(killAssists / attendance, 2)`); they appear on the site, in the API, CSV and Excel.
 - **Sign in with Steam** (optional): players see their own statistics for the period and find themselves highlighted in every table and award.
 - **Admin panel** (`/admin/`) with user accounts: ingestion status, sync / recompute / full resync / retry tasks, settings, nickname format with a live preview, custom columns with a formula preview, default sort of the tables (any column, including custom ones).

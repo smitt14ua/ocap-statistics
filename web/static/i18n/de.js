@@ -137,6 +137,10 @@
   'n.nothingToCopy': 'Nichts zu kopieren',
   'n.copyFailed': 'Kopieren fehlgeschlagen, bitte einen anderen Browser versuchen',
   'n.top10Copied': 'Top-10-Screenshot in die Zwischenablage kopiert',
+  'n.cardCopied': 'Karte in die Zwischenablage kopiert: in einen Chat einfügen',
+  'n.linkCopied': 'Link kopiert: Chats zeigen eine Vorschau davon',
+  'btn.copyCard': 'Karte kopieren',
+  'btn.copyLink': 'Link kopieren',
   'n.rotationCopied': 'Rotationsbericht in die Zwischenablage kopiert',
 
   'rep.top10Players': 'Top 10 Spieler',

@@ -65,6 +65,7 @@ internal/api/admin.go         /api/admin handlers: login, settings, previews, ta
 internal/api/account.go       /api/auth handlers: Steam sign-in and callback, me, logout
 internal/api/cache.go         response cache + per-filter aggregation cache (singleflight)
 internal/api/static.go        embedded static files, ETag, gzip, per-page CSP
+internal/api/share.go         link previews: Open Graph tags for ?player= and ?mission= links, texts from web/static/i18n
 internal/api/openapi.json     public API spec (admin API intentionally not documented)
 web/AGENTS.md                 frontend guide: files, CSP/DOM/i18n/a11y rules, adding a language, checks
 web/static/index.html, app.js site (stats table, achievements, modals, export, screenshots)
@@ -132,4 +133,5 @@ docs/decisions.md             why things are built the way they are (SQLite, dig
 - A mission OCAP receives over its WebSocket ingest is listed from its start with `conversionStatus` `streaming` but gets its `.json.gz` only when it ends; the syncer skips such operations (`ocap.Operation.Live`), and `store.Store.UpsertOperations` retries failed and missing recordings whose OCAP status changed.
 - Medical data comes only from `medicalSnapshot` events (players only): full snapshots or diffs (`diffOf` + changed fields under `set`), whose `activity` is the last few lines of the ACE log, localized; `digest.Parse` keeps the lines new since the previous snapshot. `PlayerRow.SteamID` must never reach a public response (`TestMedicalPoints` checks).
 - Players are merged by Steam account when read, not when stored: `Server.report` renames rows with `report.Identities` (cached per generation in `Server.identities`) before `report.Build`, and a handler that aggregates names from `kills` over a period must rename them with the `report.Renamer` too, or the old names count apart. The mission endpoint deliberately keeps the names of the mission and adds `player` (the current name) instead.
+- Link previews (`internal/api/share.go`) read translation keys from `web/static/i18n/*.js` on the server; the web tests do not see keys used in Go, so `TestSharePreview` checks the texts. The parser expects the files' `  'key': 'value',` layout.
 - Steam sign-in (`internal/api/account.go`): only `/api/auth/me` returns a Steam id, the viewer's own; it is not cached and not under `/api/v1/`, so it gets no CORS headers. The page highlights a player by the names `store.Store.SteamNames` returns, not by id. `TestSteamLogin` runs the OpenID flow against a fake provider that confirms only unchanged assertions.

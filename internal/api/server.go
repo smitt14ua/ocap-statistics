@@ -49,6 +49,7 @@ type Server struct {
 	idsMu  sync.Mutex
 	ids    *report.Identities // of data generation idsGen
 	idsGen int64
+	ui     uiStrings // page translations for link previews
 }
 
 func New(cfg config.Config, build BuildInfo, st *store.Store, sm *settings.Manager, sy *syncer.Syncer, web fs.FS, log *slog.Logger) *Server {
@@ -95,7 +96,7 @@ func (s *Server) Handler() (http.Handler, error) {
 		if err != nil {
 			return nil, err
 		}
-		mux.Handle("/", static)
+		mux.Handle("/", s.sharePage(static))
 	}
 	return s.withSecurityHeaders(withCORS(withRecover(s.log, mux))), nil
 }

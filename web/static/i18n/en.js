@@ -138,6 +138,10 @@
   'n.nothingToCopy': 'Nothing to copy',
   'n.copyFailed': 'Could not copy, try another browser',
   'n.top10Copied': 'Top 10 screenshot copied to the clipboard',
+  'n.cardCopied': 'Card copied to the clipboard: paste it into a chat',
+  'n.linkCopied': 'Link copied: chats show a preview of it',
+  'btn.copyCard': 'Copy card',
+  'btn.copyLink': 'Copy link',
   'n.rotationCopied': 'Rotation report copied to the clipboard',
 
   'rep.top10Players': 'Top 10 players',
