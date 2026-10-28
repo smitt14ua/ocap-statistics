@@ -1,10 +1,10 @@
 module github.com/smitt14ua/ocap-statistics
 
-go 1.26.0
+go 1.26
 
 require (
 	github.com/coreos/go-oidc/v3 v3.21.0
-	golang.org/x/oauth2 v0.37.0
+	golang.org/x/oauth2 v0.36.0
 	modernc.org/sqlite v1.53.0
 )
 
