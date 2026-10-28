@@ -55,8 +55,18 @@
     "logoUrl": "",
     "ocapUrl": ""
   },
+  "login": "off",
   "steam": {
-    "login": false,
     "sessionTTL": "720h"
+  },
+  "oidc": {
+    "issuer": "",
+    "clientId": "",
+    "clientSecret": "",
+    "scopes": ["openid", "profile"],
+    "providerName": "SSO",
+    "steamIdClaim": "steam_id",
+    "pictureClaim": "picture",
+    "nameClaim": "name"
   }
 }

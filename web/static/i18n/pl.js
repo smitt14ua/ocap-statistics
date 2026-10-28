@@ -411,10 +411,12 @@
   'feed.cause.lastHit': 'ostatnie trafienie',
   'feed.cause.lastHit.title': 'Nagranie nie podaje zabójcy (samobójstwo, utonięcie, wrak): zabójstwo zalicza się wrogowi, który trafił ofiarę jako ostatni',
 
-  'auth.signIn': 'Zaloguj przez Steam',
+  'auth.signIn': 'Zaloguj przez {name}',
   'auth.signOut': 'Wyloguj',
   'auth.profile': 'Mój profil',
-  'auth.failed': 'Nie udało się zalogować przez Steam. Spróbuj ponownie.',
+  'auth.failed': 'Nie udało się zalogować przez {name}. Spróbuj ponownie.',
+  'auth.claims': '{name} nie przekazał tej stronie twojego konta Steam ani nazwy. Poproś administratora strony o sprawdzenie ustawień logowania.',
+  'auth.noSteam': 'Zalogowano, ale do twojego konta {name} nie jest podłączone konto Steam.',
   'me.title': 'Moje statystyki',
   'me.you': 'ty',
   'me.yourSquad': 'twój oddział',
@@ -422,6 +424,7 @@
   'me.rankTitle': 'Miejsce w tabeli graczy przy domyślnym sortowaniu',
   'me.unranked': 'Brak w tabeli: mniej niż {n} misji',
   'me.noGames': 'Brak jeszcze misji z twoim kontem Steam. Gracze są rozpoznawani po Steam ID, które nowsze wersje OCAP zapisują w nagraniach.',
+  'me.noSteam': 'Do twojego konta {name} nie jest podłączone konto Steam, więc nie można znaleźć twoich misji. Podłącz tam Steam, a potem wyloguj się i zaloguj ponownie.',
   'me.noneInPeriod': 'Brak zaliczonych misji w tym okresie ({period}).',
   'me.alsoAs': 'Inne nicki: {names}',
 };

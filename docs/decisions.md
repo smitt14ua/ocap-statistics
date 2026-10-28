@@ -20,7 +20,7 @@ Two version numbers drive this: `digest.Version` (what is extracted — bump it 
 
 The data set is small (hundreds to thousands of missions), written by one process and read by many requests. SQLite needs no separate service, and the pure-Go driver keeps the build free of cgo, so one static binary cross-compiles for linux/amd64 and linux/arm64 without emulation and the runtime image is a small Alpine image.
 
-Settings: WAL journal, `busy_timeout`, `_txlock=immediate` (a writer takes the lock when its transaction starts, so concurrent writers wait instead of failing on upgrade), a small connection pool. It is the only third-party Go dependency.
+Settings: WAL journal, `busy_timeout`, `_txlock=immediate` (a writer takes the lock when its transaction starts, so concurrent writers wait instead of failing on upgrade), a small connection pool. It was the only third-party Go dependency until the OpenID Connect sign-in (17).
 
 ## 4. Aggregate in Go, cache per data generation
 
@@ -81,3 +81,11 @@ The merge (`report.Identities`) is applied when the statistics are read, over al
 ## 16. Link previews from the page's translations, pictures in the browser
 
 Discord, Telegram and the like preview a link from its Open Graph tags and run no scripts, so the server fills the tags of `index.html` for links to a player (`?player=`) or a mission (`?mission=`) with the name and key numbers. The texts reuse the page's translation files (`web/static/i18n`, read once on the server) in the language of the `lang` parameter the page adds to links it copies, else `Accept-Language`, so there is one set of strings. A preview carries no rendered image: drawing text into a PNG on the server needs a font library and an embedded font, a second dependency the project avoids. A picture for chats is made in the browser instead ("Copy card", html2canvas as for the top 10).
+
+## 17. OpenID Connect sign-in through a vetted library; one sign-in method at a time
+
+A community may run its own identity provider that already knows each member's Steam account. `login=oidc` signs players in there instead of on Steam (14); `login` chooses one method, so the page has one button and a session always means the same thing. The provider is configured only through `OIDC_*` variables: issuer (endpoints from discovery), client, scopes and the names of the claims with the SteamID64, avatar and nickname, since providers name them differently.
+
+Token handling is security-critical and easy to get subtly wrong, so it is left to `github.com/coreos/go-oidc/v3` and `golang.org/x/oauth2` (discovery, Authorization Code flow with PKCE `S256`, `client_secret_basic` or a public client, ID token signature, issuer, audience and expiry) instead of the standard library alone; the dependencies are imported only by `internal/auth`. The site adds state and nonce checks, requires the userinfo to name the ID token's `sub`, and takes the profile from the userinfo, which is current, not from the ID token.
+
+Users are bound by issuer and `sub` only. The Steam id, nickname and avatar are profile data, refreshed at every sign-in: a user may link Steam later or change the avatar, whose URL is never treated as permanent. A user without a linked Steam account is signed in and told so; when the provider shares neither a Steam id nor a name (typically because it silently granted fewer scopes than requested), the sign-in fails rather than showing an empty profile, and the granted scopes are logged. Codes and tokens are never logged; the ID token is stored with the session only for `id_token_hint` at the provider's logout.

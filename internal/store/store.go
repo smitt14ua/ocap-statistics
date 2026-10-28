@@ -125,7 +125,20 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS player_sessions (
 	token_hash TEXT PRIMARY KEY,
 	steam_id   TEXT    NOT NULL,
-	expires_at INTEGER NOT NULL
+	expires_at INTEGER NOT NULL,
+	issuer     TEXT    NOT NULL DEFAULT '',
+	subject    TEXT    NOT NULL DEFAULT '',
+	id_token   TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS oidc_accounts (
+	issuer     TEXT    NOT NULL,
+	subject    TEXT    NOT NULL,
+	steam_id   TEXT    NOT NULL DEFAULT '',
+	name       TEXT    NOT NULL DEFAULT '',
+	picture    TEXT    NOT NULL DEFAULT '',
+	updated_at INTEGER NOT NULL,
+	PRIMARY KEY (issuer, subject)
 );
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -185,6 +198,10 @@ func migrate(db *sql.DB) error {
 		{"mission_players", "steam_id", "TEXT NOT NULL DEFAULT ''"},
 		// Empty in older databases, so failed and missing recordings are retried once.
 		{"missions", "ocap_status", "TEXT NOT NULL DEFAULT ''"},
+		// Sessions of the OpenID Connect sign-in; older ones are Steam sessions.
+		{"player_sessions", "issuer", "TEXT NOT NULL DEFAULT ''"},
+		{"player_sessions", "subject", "TEXT NOT NULL DEFAULT ''"},
+		{"player_sessions", "id_token", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		var n int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&n); err != nil {

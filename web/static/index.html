@@ -27,6 +27,10 @@
     .notice .progress { color: var(--muted); font-variant-numeric: tabular-nums; }
     .hidden { display: none !important; }
     .head-actions, .account { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .who-me { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .who-name { color: var(--text-strong); font-weight: 600; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: none; background: var(--bg-3); }
+    .avatar.placeholder { display: inline-grid; place-items: center; color: var(--text-strong); font-weight: 600; font-size: 13px; border: 1px solid var(--border-hover); }
 
     /* The signed-in player: their card, and their rows and awards everywhere, marked by a
        tint (and hidden text for screen readers, see youBadge). */

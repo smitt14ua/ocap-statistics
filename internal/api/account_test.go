@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/smitt14ua/ocap-statistics/internal/config"
 )
 
 const testSteamID = "76561190000000001" // Smith's playerUid in the fixture recording
@@ -133,6 +135,8 @@ func (b *browser) callback(returnTo string, q url.Values) string {
 type accountResp struct {
 	SignedIn bool   `json:"signedIn"`
 	SteamID  string `json:"steamId"`
+	Name     string `json:"name"`
+	Picture  string `json:"picture"`
 	Names    []struct {
 		Name     string `json:"name"`
 		Missions int    `json:"missions"`
@@ -155,7 +159,7 @@ func (b *browser) account() accountResp {
 func TestSteamLogin(t *testing.T) {
 	steam := newFakeSteam(t)
 	_, sy, h := setup(t, func(s *Server) {
-		s.cfg.Steam.Login = true
+		s.cfg.Login = config.LoginSteam
 		s.steam.Endpoint = steam.endpoint()
 		s.steam.Client = steam.Client()
 	})

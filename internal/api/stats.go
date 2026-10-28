@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smitt14ua/ocap-statistics/internal/config"
 	"github.com/smitt14ua/ocap-statistics/internal/report"
 	"github.com/smitt14ua/ocap-statistics/internal/settings"
 	"github.com/smitt14ua/ocap-statistics/internal/store"
@@ -284,8 +285,21 @@ func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) {
 		"minDuration": set.MinDuration,
 		"minMissions": set.MinMissions,
 		"rotation":    set.Rotation,
-		"steamLogin":  s.cfg.Steam.Login,
+		"steamLogin":  s.cfg.Login == config.LoginSteam,
+		"login":       s.cfg.Login,
+		"loginName":   s.loginName(),
 	})
+}
+
+// loginName is the provider named on the sign-in button.
+func (s *Server) loginName() string {
+	switch s.cfg.Login {
+	case config.LoginSteam:
+		return "Steam"
+	case config.LoginOIDC:
+		return s.cfg.OIDC.ProviderName
+	}
+	return ""
 }
 
 func (s *Server) triggerSync(w http.ResponseWriter, r *http.Request) {

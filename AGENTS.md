@@ -58,11 +58,11 @@ internal/report/columns.go    custom columns: Column, Variables, NormalizeColumn
 internal/formula/formula.go   formula language: lexer, parser, evaluator (no reflection, no eval)
 internal/settings/settings.go runtime settings: config defaults + admin overrides stored in meta table
 internal/syncer/syncer.go     task loop: sync / recompute / resync, retries, missing recordings
-internal/auth/                PBKDF2 password hashing, session tokens, default admin from env, Steam OpenID (steam.go)
+internal/auth/                PBKDF2 password hashing, session tokens, default admin from env, Steam OpenID (steam.go), OpenID Connect (oidc.go)
 internal/api/server.go        Server, routes, error helpers, cached handler, gzip/ETag, middleware
 internal/api/stats.go         public /api/v1 handlers, filters, CSV
 internal/api/admin.go         /api/admin handlers: login, settings, previews, tasks, users
-internal/api/account.go       /api/auth handlers: Steam sign-in and callback, me, logout
+internal/api/account.go       /api/auth handlers: Steam and OpenID Connect sign-in and callbacks, me, logout
 internal/api/cache.go         response cache + per-filter aggregation cache (singleflight)
 internal/api/static.go        embedded static files, ETag, gzip, per-page CSP
 internal/api/share.go         link previews: Open Graph tags for ?player= and ?mission= links, texts from web/static/i18n
@@ -102,7 +102,7 @@ docs/decisions.md             why things are built the way they are (SQLite, dig
 
 ## Conventions and constraints
 
-- **Go**: standard library first; the only dependency is `modernc.org/sqlite`. Errors wrap with `%w`; API errors use `apiError`/`withCode` and are written by `Server.fail`. Comment exported identifiers and non-obvious decisions, not the obvious.
+- **Go**: standard library first; the dependencies are `modernc.org/sqlite` and, for the OpenID Connect sign-in only, `github.com/coreos/go-oidc/v3` with `golang.org/x/oauth2` (decision 17). Errors wrap with `%w`; API errors use `apiError`/`withCode` and are written by `Server.fail`. Comment exported identifiers and non-obvious decisions, not the obvious.
 - **Performance**: never aggregate the database per request outside `Server.report` (it is cached and deduplicated). Keep the digest small; don't store positions.
 - **Security**: strict CSP (no inline scripts, no `eval`, no new script origins; third-party scripts only on demand with SRI); build DOM with `el()` + `textContent`, never `innerHTML` with data (details in `web/AGENTS.md`); validate settings that reach HTML/CSS; trust `X-Forwarded-*` only with `trustProxy`; admin API stays same-origin with the `X-Requested-With` CSRF header. See `SECURITY.md`.
 - **Accessibility**: real buttons/links for interactive elements, `aria-sort` on sortable headers, WAI-ARIA tabs, modals make `.page` inert, text contrast ≥ 4.5:1 using tokens in `app.css`, user-defined colours never used for text.
@@ -135,3 +135,4 @@ docs/decisions.md             why things are built the way they are (SQLite, dig
 - Players are merged by Steam account when read, not when stored: `Server.report` renames rows with `report.Identities` (cached per generation in `Server.identities`) before `report.Build`, and a handler that aggregates names from `kills` over a period must rename them with the `report.Renamer` too, or the old names count apart. The mission endpoint deliberately keeps the names of the mission and adds `player` (the current name) instead.
 - Link previews (`internal/api/share.go`) read translation keys from `web/static/i18n/*.js` on the server; the web tests do not see keys used in Go, so `TestSharePreview` checks the texts. The parser expects the files' `  'key': 'value',` layout.
 - Steam sign-in (`internal/api/account.go`): only `/api/auth/me` returns a Steam id, the viewer's own; it is not cached and not under `/api/v1/`, so it gets no CORS headers. The page highlights a player by the names `store.Store.SteamNames` returns, not by id. `TestSteamLogin` runs the OpenID flow against a fake provider that confirms only unchanged assertions.
+- Sign-in method (`config.Login`): `steam` or `oidc`, never both; the older `steam.login` switch maps to `steam`. Sessions of the other method or of another OIDC issuer are ignored by `Server.playerSession`. OIDC users are bound by issuer + `sub` (`store.Store.SaveOIDCAccount`); their Steam id may be empty (not linked), so never call `SteamNames` with an empty id — it would match every row without one. The `OIDC_*` variables have no `OCAPSTATS_` prefix. `TestOIDCLogin` and the other `TestOIDC*` tests run against a fake provider in `internal/api/oidc_test.go` and fail if a code or token reaches the log.

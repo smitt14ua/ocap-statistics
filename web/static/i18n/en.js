@@ -412,10 +412,12 @@
   'feed.cause.lastHit': 'last hit',
   'feed.cause.lastHit.title': 'The recording names no killer (suicide, drowning, a wreck): the kill goes to the enemy who hit the victim last',
 
-  'auth.signIn': 'Sign in with Steam',
+  'auth.signIn': 'Sign in with {name}',
   'auth.signOut': 'Sign out',
   'auth.profile': 'My profile',
-  'auth.failed': 'Could not sign in with Steam. Try again.',
+  'auth.failed': 'Could not sign in with {name}. Try again.',
+  'auth.claims': '{name} did not share your Steam account or name with this site. Ask the site administrator to check the sign-in settings.',
+  'auth.noSteam': 'You are signed in, but your {name} account has no linked Steam account.',
   'me.title': 'My statistics',
   'me.you': 'you',
   'me.yourSquad': 'your squad',
@@ -423,6 +425,7 @@
   'me.rankTitle': 'Place in the players table with its default sort',
   'me.unranked': 'Not in the table: fewer than {n} missions',
   'me.noGames': 'No missions with your Steam account yet. Players are recognised by the Steam id that recent OCAP versions save in recordings.',
+  'me.noSteam': 'Your {name} account has no linked Steam account, so your missions cannot be found. Link Steam there, then sign out and sign in again.',
   'me.noneInPeriod': 'No counted missions in this period ({period}).',
   'me.alsoAs': 'Also played as {names}',
 };

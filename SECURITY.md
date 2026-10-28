@@ -24,7 +24,12 @@ impact you expect. You should get an answer within a week.
 - Steam sign-in (OpenID 2.0) accepts an answer only when Steam confirms its signature
   (`check_authentication`), it comes from Steam's endpoint, signs the identity, return address
   and nonce, is addressed to exactly the sign-in started by this browser (a state cookie), and
-  its nonce is fresh and unused. Player sessions are stored hashed, sent as `HttpOnly`,
+  its nonce is fresh and unused.
+- OpenID Connect sign-in uses the Authorization Code flow with PKCE (`S256`), a state cookie
+  and a nonce; the ID token is verified by go-oidc (signature against the provider's JWKS,
+  issuer, audience, expiry), the userinfo must name the same `sub`, and users are bound by
+  issuer and `sub` only. Codes, tokens and profile data are never logged; the ID token is kept
+  server-side only as `id_token_hint` for the logout. Player sessions are stored hashed, sent as `HttpOnly`,
   `SameSite=Lax` cookies, grant no admin access, and only reveal the player's own Steam id.
 - Failed logins are rate limited per client address and per user name; password hashing is
   bounded so it cannot exhaust the CPU.

@@ -43,6 +43,7 @@ type Server struct {
 	results   *resultCache
 	limiter   *loginLimiter
 	steam     *auth.Steam
+	oidc      *auth.OIDC
 	// hashSlots bounds concurrent password hashing (CPU-heavy by design).
 	hashSlots chan struct{}
 
@@ -59,6 +60,7 @@ func New(cfg config.Config, build BuildInfo, st *store.Store, sm *settings.Manag
 		results:   newResultCache(32),
 		limiter:   newLoginLimiter(),
 		steam:     auth.NewSteam(),
+		oidc:      auth.NewOIDC(cfg.OIDC),
 		hashSlots: make(chan struct{}, 2),
 	}
 }

@@ -18,7 +18,7 @@ OCAP ──(every 10 min: list of recordings)──► ocap-stats ──► SQLi
 - **Web page** with filters, player/squad views, Excel export, top-10 and rotation screenshots to the clipboard and links to the replays in OCAP.
 - **Sharing:** a player's profile and a mission have a link (`?player=…`, `?mission=…`) that Discord, Telegram and other chats preview with the name and key numbers, in the language of whoever copied it, and a "Copy card" button that puts a picture of them on the clipboard.
 - **Custom columns:** define your own columns with spreadsheet-like formulas in the admin panel (e.g. `round(killAssists / attendance, 2)`); they appear on the site, in the API, CSV and Excel.
-- **Sign in with Steam** (optional): players see their own statistics for the period and find themselves highlighted in every table and award.
+- **Sign in** with Steam or an OpenID Connect provider (optional): players see their own statistics for the period and find themselves highlighted in every table and award.
 - **Admin panel** (`/admin/`) with user accounts: ingestion status, sync / recompute / full resync / retry tasks, settings, nickname format with a live preview, custom columns with a formula preview, default sort of the tables (any column, including custom ones).
 - **Localized UI:** English, Belarusian, Czech, German, Kazakh, Polish and Ukrainian, picked from the browser language and switchable manually.
 - **Secure and light by default:** strict Content-Security-Policy, rate-limited admin login, gzip and ETags everywhere, no web fonts or trackers, no third-party code on page load.
@@ -106,21 +106,37 @@ Statistics settings (tags, start date, minimum duration, nickname format, aliase
 | `rotation.sides` | — | — | Rotation sides: name, colour and squads |
 | `ui.title`, `ui.logoUrl` | `OCAPSTATS_UI_TITLE`, `OCAPSTATS_UI_LOGO_URL` | `OCAP Statistics` | Site title and logo |
 | `ui.ocapUrl` | `OCAPSTATS_UI_OCAP_URL` | `ocap.url` | Public OCAP URL for replay links |
-| `steam.login` | `OCAPSTATS_STEAM_LOGIN` | `false` | "Sign in with Steam" on the site (see [Steam sign-in](#steam-sign-in)) |
-| `steam.sessionTTL` | `OCAPSTATS_STEAM_SESSION_TTL` | `720h` | How long a player stays signed in |
-| `publicUrl` | `OCAPSTATS_PUBLIC_URL` | from the request | Address users open the site at, e.g. `https://stats.example.com`; Steam sends players back there |
+| `login` | `OCAPSTATS_LOGIN` | off | How players sign in: `steam`, `oidc` or `off` (see [Player sign-in](#player-sign-in)) |
+| `steam.login` | `OCAPSTATS_STEAM_LOGIN` | `false` | Older switch for `login=steam`, used when `login` is not set |
+| `steam.sessionTTL` | `OCAPSTATS_STEAM_SESSION_TTL` | `720h` | How long a player stays signed in (either method) |
+| `oidc.issuer` | `OIDC_ISSUER` | — | Issuer of the OpenID Connect provider; endpoints come from `<issuer>/.well-known/openid-configuration` |
+| `oidc.clientId` | `OIDC_CLIENT_ID` | — | Client ID |
+| `oidc.clientSecret` | `OIDC_CLIENT_SECRET` | — | Client secret (`client_secret_basic`); empty = public client, PKCE only |
+| `oidc.scopes` | `OIDC_SCOPES` | `openid profile` | Scopes, separated by spaces (`openid` is always added) |
+| `oidc.providerName` | `OIDC_PROVIDER_NAME` | `SSO` | Name on the "Sign in with …" button |
+| `oidc.steamIdClaim` | `OIDC_STEAM_ID_CLAIM` | `steam_id` | Claim with the SteamID64 |
+| `oidc.pictureClaim` | `OIDC_PICTURE_CLAIM` | `picture` | Claim with the avatar URL |
+| `oidc.nameClaim` | `OIDC_NAME_CLAIM` | `name` | Claim with the nickname (falls back to `preferred_username`, then `nickname`) |
+| `publicUrl` | `OCAPSTATS_PUBLIC_URL` | from the request | Address users open the site at, e.g. `https://stats.example.com`; the sign-in sends players back there |
 | `trustProxy` | `OCAPSTATS_TRUST_PROXY` | `false` | Trust `X-Forwarded-*` headers from a reverse proxy |
 | `log.level`, `log.format` | `OCAPSTATS_LOG_LEVEL`, `OCAPSTATS_LOG_FORMAT` | `info`, `text` | Logging (`debug`/`info`/`warn`/`error`, `text`/`json`) |
 | `listen` | `OCAPSTATS_LISTEN` | `127.0.0.1:5080` (`0.0.0.0:5080` in Docker) | HTTP listen address |
 | `db` | `OCAPSTATS_DB` | `data/stats.db` (`/data/stats.db` in Docker) | SQLite database |
 
-### Steam sign-in
+### Player sign-in
 
-With `OCAPSTATS_STEAM_LOGIN=true` players can sign in with their Steam account (OpenID, no API key needed). The site then shows a card with their own statistics for the selected period, highlights their rows, squad and awards everywhere, and adds a "My profile" button. Nothing else changes: signed-in players get no extra rights, and statistics stay public.
+Players can sign in to see a card with their own statistics for the selected period, find their rows, squad and awards highlighted everywhere, and get a "My profile" button. Nothing else changes: signed-in players get no extra rights, and statistics stay public. `OCAPSTATS_LOGIN` picks one of two methods:
+
+- `steam`: "Sign in with Steam" (OpenID 2.0, no API key or registration needed).
+- `oidc`: an OpenID Connect provider of your own (Keycloak, Authentik, Zitadel, …) that knows the user's Steam account and returns its SteamID64 in a claim (`OIDC_STEAM_ID_CLAIM`). The service uses the Authorization Code flow with PKCE (`S256`) and authenticates with `client_secret_basic` when `OIDC_CLIENT_SECRET` is set; without it, it is a public client. Register at the provider:
+  - redirect URI `https://<your site>/api/auth/oidc/callback` (for local development e.g. `http://localhost:8765/api/auth/oidc/callback`);
+  - post-logout redirect URI `https://<your site>/` (signing out also signs out at the provider when it has an `end_session_endpoint`).
+
+  Users are identified by issuer and `sub`; the Steam id, nickname and avatar are read from the userinfo endpoint at every sign-in. A user without a linked Steam account is signed in and told to link it at the provider. When the provider shares neither a Steam id nor a name — usually because the client may not use the requested scopes, which providers drop silently — the sign-in fails and the log names the scopes the provider granted.
 
 Players are recognised by the Steam id that recent OCAP versions write into recordings (`playerUid`), so only missions recorded with such a version link a Steam account to a name; older missions of the same name count too (see "Players" under [How statistics are computed](#how-statistics-are-computed)). Steam ids are never shown on the site or in the API, except to the signed-in player themselves.
 
-Set `OCAPSTATS_PUBLIC_URL` when the address cannot be derived from the request (behind a proxy without `OCAPSTATS_TRUST_PROXY`, or under a path prefix).
+Set `OCAPSTATS_PUBLIC_URL` when the address cannot be derived from the request (behind a proxy without `OCAPSTATS_TRUST_PROXY`, or under a path prefix); the OIDC redirect URI is built from it.
 
 ## API
 

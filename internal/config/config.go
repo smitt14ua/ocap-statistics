@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -62,14 +63,43 @@ type Config struct {
 	Stats      Stats    `json:"stats"`
 	Rotation   Rotation `json:"rotation"`
 	UI         UI       `json:"ui"`
-	Steam      Steam    `json:"steam"`
+	// Login selects how players sign in on the site: LoginSteam, LoginOIDC or "" (no sign-in).
+	// Signed-in players see their own statistics highlighted; they are recognised by the
+	// Steam ids in recordings.
+	Login string `json:"login"`
+	Steam Steam  `json:"steam"`
+	OIDC  OIDC   `json:"oidc"`
 }
 
-// Steam configures "Sign in through Steam" on the site. Signed-in players see their own
-// statistics highlighted; they are recognised by the Steam ids in recordings.
+// Sign-in methods for Config.Login.
+const (
+	LoginSteam = "steam"
+	LoginOIDC  = "oidc"
+)
+
+// Steam configures "Sign in through Steam" (OpenID 2.0) and player sessions of either method.
 type Steam struct {
+	// Login is the older switch for the Steam sign-in, used when Config.Login is empty.
 	Login      bool     `json:"login"`
 	SessionTTL Duration `json:"sessionTTL"`
+}
+
+// OIDC configures the sign-in through an OpenID Connect provider that knows the user's Steam
+// account. Its environment variables are OIDC_* (without the OCAPSTATS_ prefix).
+type OIDC struct {
+	// Issuer is the provider's issuer; endpoints come from <issuer>/.well-known/openid-configuration.
+	Issuer   string `json:"issuer"`
+	ClientID string `json:"clientId"`
+	// ClientSecret authenticates the service at the token endpoint. Empty = public client
+	// (PKCE only).
+	ClientSecret string   `json:"clientSecret"`
+	Scopes       []string `json:"scopes"`
+	// ProviderName is shown on the "Sign in with …" button.
+	ProviderName string `json:"providerName"`
+	// Names of the userinfo claims with the SteamID64, the avatar URL and the nickname.
+	SteamIDClaim string `json:"steamIdClaim"`
+	PictureClaim string `json:"pictureClaim"`
+	NameClaim    string `json:"nameClaim"`
 }
 
 // Log configures logging.
@@ -185,6 +215,13 @@ func Default() Config {
 			Title: "OCAP Statistics",
 		},
 		Steam: Steam{SessionTTL: Duration(30 * 24 * time.Hour)},
+		OIDC: OIDC{
+			Scopes:       []string{"openid", "profile"},
+			ProviderName: "SSO",
+			SteamIDClaim: "steam_id",
+			PictureClaim: "picture",
+			NameClaim:    "name",
+		},
 	}
 }
 
@@ -234,6 +271,17 @@ func applyEnv(cfg *Config) error {
 	str("OCAPSTATS_UI_LOGO_URL", &cfg.UI.LogoURL)
 	str("OCAPSTATS_UI_OCAP_URL", &cfg.UI.OCAPURL)
 	str("OCAPSTATS_PUBLIC_URL", &cfg.PublicURL)
+	str("OCAPSTATS_LOGIN", &cfg.Login)
+	str("OIDC_ISSUER", &cfg.OIDC.Issuer)
+	str("OIDC_CLIENT_ID", &cfg.OIDC.ClientID)
+	str("OIDC_CLIENT_SECRET", &cfg.OIDC.ClientSecret)
+	str("OIDC_PROVIDER_NAME", &cfg.OIDC.ProviderName)
+	str("OIDC_STEAM_ID_CLAIM", &cfg.OIDC.SteamIDClaim)
+	str("OIDC_PICTURE_CLAIM", &cfg.OIDC.PictureClaim)
+	str("OIDC_NAME_CLAIM", &cfg.OIDC.NameClaim)
+	if v, ok := os.LookupEnv("OIDC_SCOPES"); ok {
+		cfg.OIDC.Scopes = strings.Fields(v)
+	}
 
 	if v, ok := os.LookupEnv("OCAPSTATS_SYNC_TAGS"); ok {
 		cfg.Sync.Tags = splitList(v)
@@ -308,6 +356,48 @@ func splitList(s string) []string {
 	return out
 }
 
+// validateLogin normalises the sign-in method; the older steam.login switch counts when no
+// method is chosen.
+func (c *Config) validateLogin() error {
+	switch c.Login = strings.ToLower(strings.TrimSpace(c.Login)); c.Login {
+	case "":
+		if c.Steam.Login {
+			c.Login = LoginSteam
+		}
+	case "off", "none", "false":
+		c.Login = ""
+	case LoginSteam, LoginOIDC:
+	default:
+		return fmt.Errorf("login: expected steam, oidc or off, got %q", c.Login)
+	}
+	o := &c.OIDC
+	o.Issuer = strings.TrimSpace(o.Issuer)
+	o.ClientID = strings.TrimSpace(o.ClientID)
+	for _, f := range []struct {
+		dst *string
+		def string
+	}{{&o.ProviderName, "SSO"}, {&o.SteamIDClaim, "steam_id"}, {&o.PictureClaim, "picture"}, {&o.NameClaim, "name"}} {
+		if *f.dst = strings.TrimSpace(*f.dst); *f.dst == "" {
+			*f.dst = f.def
+		}
+	}
+	// "openid" makes it OpenID Connect; without it the provider issues no ID token.
+	if !slices.Contains(o.Scopes, "openid") {
+		o.Scopes = append([]string{"openid"}, o.Scopes...)
+	}
+	if c.Login != LoginOIDC {
+		return nil
+	}
+	if o.ClientID == "" {
+		return errors.New("oidc: OIDC_CLIENT_ID is required for login=oidc")
+	}
+	u, err := url.Parse(o.Issuer)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("oidc: OIDC_ISSUER must be the provider's https address, got %q", o.Issuer)
+	}
+	return nil
+}
+
 func (c *Config) validate() error {
 	c.OCAP.URL = strings.TrimRight(c.OCAP.URL, "/")
 	if c.UI.OCAPURL == "" {
@@ -343,6 +433,9 @@ func (c *Config) validate() error {
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
 			return fmt.Errorf("publicUrl: expected an http(s) address such as https://stats.example.com, got %q", c.PublicURL)
 		}
+	}
+	if err := c.validateLogin(); err != nil {
+		return err
 	}
 	if c.Sync.MaxAttempts < 1 {
 		c.Sync.MaxAttempts = 1

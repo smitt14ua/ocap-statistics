@@ -5,26 +5,59 @@ import (
 	"time"
 )
 
-// Players signed in through Steam. Their sessions are separate from admin sessions and grant
-// nothing but recognising the player on the site.
+// Players signed in through Steam or an OpenID Connect provider. Their sessions are separate
+// from admin sessions and grant nothing but recognising the player on the site.
 
-// CreatePlayerSession stores a player session by the hash of its token.
+// PlayerSession is a signed-in player.
+type PlayerSession struct {
+	SteamID string
+	// Issuer and Subject identify a user of the OpenID Connect sign-in (empty for Steam).
+	Issuer, Subject string
+	// Name and Picture are the profile at that provider at the last sign-in.
+	Name, Picture string
+	// IDToken is the provider's ID token, for the logout.
+	IDToken string
+}
+
+// CreatePlayerSession stores a session of the Steam sign-in by the hash of its token.
 func (s *Store) CreatePlayerSession(ctx context.Context, tokenHash, steamID string, expires time.Time) error {
+	return s.createPlayerSession(ctx, tokenHash, PlayerSession{SteamID: steamID}, expires)
+}
+
+// SaveOIDCAccount stores (or refreshes) the profile of an OpenID Connect user and creates a
+// session for them. Users are told apart by issuer and subject only; the Steam id, name and
+// avatar are profile data that change at the provider.
+func (s *Store) SaveOIDCAccount(ctx context.Context, tokenHash string, a PlayerSession, expires time.Time) error {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO oidc_accounts (issuer, subject, steam_id, name, picture, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (issuer, subject) DO UPDATE SET steam_id = excluded.steam_id, name = excluded.name,
+			picture = excluded.picture, updated_at = excluded.updated_at`,
+		a.Issuer, a.Subject, a.SteamID, a.Name, a.Picture, time.Now().Unix()); err != nil {
+		return err
+	}
+	return s.createPlayerSession(ctx, tokenHash, PlayerSession{Issuer: a.Issuer, Subject: a.Subject, IDToken: a.IDToken}, expires)
+}
+
+func (s *Store) createPlayerSession(ctx context.Context, tokenHash string, a PlayerSession, expires time.Time) error {
 	// Expired sessions are cleaned up opportunistically.
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM player_sessions WHERE expires_at < ?`, time.Now().Unix()); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO player_sessions (token_hash, steam_id, expires_at) VALUES (?, ?, ?)`,
-		tokenHash, steamID, expires.Unix())
+	_, err := s.db.ExecContext(ctx, `INSERT INTO player_sessions (token_hash, steam_id, expires_at, issuer, subject, id_token)
+		VALUES (?, ?, ?, ?, ?, ?)`, tokenHash, a.SteamID, expires.Unix(), a.Issuer, a.Subject, a.IDToken)
 	return err
 }
 
-// PlayerSession returns the Steam id of a valid player session, or sql.ErrNoRows.
-func (s *Store) PlayerSession(ctx context.Context, tokenHash string) (string, error) {
-	var id string
-	err := s.db.QueryRowContext(ctx, `SELECT steam_id FROM player_sessions WHERE token_hash = ? AND expires_at >= ?`,
-		tokenHash, time.Now().Unix()).Scan(&id)
-	return id, err
+// PlayerSession returns a valid player session, or sql.ErrNoRows. A session of the OpenID
+// Connect sign-in carries the user's current profile.
+func (s *Store) PlayerSession(ctx context.Context, tokenHash string) (PlayerSession, error) {
+	var a PlayerSession
+	err := s.db.QueryRowContext(ctx, `SELECT CASE WHEN p.issuer = '' THEN p.steam_id ELSE COALESCE(a.steam_id, '') END,
+			p.issuer, p.subject, COALESCE(a.name, ''), COALESCE(a.picture, ''), p.id_token
+		FROM player_sessions p LEFT JOIN oidc_accounts a ON a.issuer = p.issuer AND a.subject = p.subject
+		WHERE p.token_hash = ? AND p.expires_at >= ?`,
+		tokenHash, time.Now().Unix()).Scan(&a.SteamID, &a.Issuer, &a.Subject, &a.Name, &a.Picture, &a.IDToken)
+	return a, err
 }
 
 func (s *Store) DeletePlayerSession(ctx context.Context, tokenHash string) error {

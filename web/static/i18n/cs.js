@@ -411,10 +411,12 @@
   'feed.cause.lastHit': 'poslední zásah',
   'feed.cause.lastHit.title': 'Záznam neuvádí zabijáka (sebevražda, utonutí, vrak): zabití se připíše nepříteli, který oběť zasáhl naposledy',
 
-  'auth.signIn': 'Přihlásit přes Steam',
+  'auth.signIn': 'Přihlásit přes {name}',
   'auth.signOut': 'Odhlásit',
   'auth.profile': 'Můj profil',
-  'auth.failed': 'Přihlášení přes Steam se nezdařilo. Zkuste to znovu.',
+  'auth.failed': 'Přihlášení přes {name} se nezdařilo. Zkuste to znovu.',
+  'auth.claims': '{name} tomuto webu nesdílel váš účet Steam ani jméno. Požádejte správce webu o kontrolu nastavení přihlášení.',
+  'auth.noSteam': 'Jste přihlášeni, ale k vašemu účtu {name} není připojen účet Steam.',
   'me.title': 'Moje statistiky',
   'me.you': 'vy',
   'me.yourSquad': 'váš oddíl',
@@ -422,6 +424,7 @@
   'me.rankTitle': 'Pořadí v tabulce hráčů při výchozím řazení',
   'me.unranked': 'Není v tabulce: méně než {n} misí',
   'me.noGames': 'Zatím žádné mise s vaším účtem Steam. Hráči se rozpoznávají podle Steam ID, které novější verze OCAP ukládají do nahrávek.',
+  'me.noSteam': 'K vašemu účtu {name} není připojen účet Steam, proto vaše mise nelze najít. Připojte tam Steam, pak se odhlaste a znovu přihlaste.',
   'me.noneInPeriod': 'V tomto období ({period}) žádné započítané mise.',
   'me.alsoAs': 'Další jména: {names}',
 };

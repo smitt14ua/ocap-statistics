@@ -276,7 +276,8 @@ class StatsApp {
     const mission = params.get('mission');
     this.accountReady = this.loadAccount();
     await this.load();
-    if (params.get('login') === 'failed') this.toast(t('n.error'), t('auth.failed'), true);
+    const login = { failed: 'auth.failed', claims: 'auth.claims', nosteam: 'auth.noSteam' }[params.get('login')];
+    if (login) this.toast(t(login === 'auth.noSteam' ? 'n.warning' : 'n.error'), t(login, { name: this.cfg.loginName }), true);
     if (/^\d+$/.test(mission || '')) this.openMission(mission);
     else if (params.get('player')) this.openPlayer(params.get('player'));
   }
@@ -726,10 +727,11 @@ class StatsApp {
 
   // --- signed-in player ----------------------------------------------------------------
 
-  // loadAccount asks who is signed in through Steam; the page works the same without it.
+  // loadAccount asks who is signed in (Steam or the OpenID Connect provider, cfg.login); the
+  // page works the same without it.
   async loadAccount() {
     this.me = null;
-    if (this.cfg.steamLogin) {
+    if (this.cfg.login) {
       try {
         const res = await fetch('api/auth/me', { cache: 'no-store' });
         if (res.ok) this.me = await res.json();
@@ -761,27 +763,47 @@ class StatsApp {
 
   renderAccount() {
     const box = $('account');
-    if (!this.cfg.steamLogin) { box.replaceChildren(); return; }
+    if (!this.cfg.login) { box.replaceChildren(); return; }
     if (!this.me || !this.me.signedIn) {
-      const a = el('a', { class: 'btn primary', href: 'api/auth/steam' }, t('auth.signIn'));
-      // Steam brings the visitor back to the page as it is now (period, view, open mission).
-      a.addEventListener('click', () => { a.href = `api/auth/steam?return=${encodeURIComponent(location.search)}`; });
+      const path = this.cfg.login === 'oidc' ? 'api/auth/oidc' : 'api/auth/steam';
+      const a = el('a', { class: 'btn primary', href: path }, t('auth.signIn', { name: this.cfg.loginName }));
+      // The provider brings the visitor back to the page as it is now (period, view, open mission).
+      a.addEventListener('click', () => { a.href = `${path}?return=${encodeURIComponent(location.search)}`; });
       box.replaceChildren(a);
       return;
     }
     const profile = el('button', { type: 'button', class: 'primary', onclick: () => this.openPlayer((this.myPlayer() || this.me.names[0]).name) }, t('auth.profile'));
-    box.replaceChildren(...(this.me.names.length ? [profile] : []),
+    // The OpenID Connect provider gives a nickname and maybe an avatar; Steam gives neither.
+    const who = this.cfg.login === 'oidc' && this.me.name
+      ? el('span', { class: 'who-me' }, this.avatar(this.me.name, this.me.picture), el('span', { class: 'who-name' }, this.me.name))
+      : null;
+    box.replaceChildren(...(who ? [who] : []), ...(this.me.names.length ? [profile] : []),
       el('button', { type: 'button', onclick: () => this.logout() }, t('auth.signOut')));
   }
 
+  // avatar is the provider's picture, or the first letter of the name when there is none or it
+  // does not load (the URL may have changed since the sign-in). The name is shown next to it.
+  avatar(name, picture) {
+    const placeholder = el('span', { class: 'avatar placeholder', 'aria-hidden': 'true' }, ([...name][0] || '?').toUpperCase());
+    if (!picture) return placeholder;
+    const img = el('img', { class: 'avatar', src: picture, alt: '', width: 28, height: 28, referrerpolicy: 'no-referrer' });
+    img.addEventListener('error', () => img.replaceWith(placeholder));
+    return img;
+  }
+
   async logout() {
+    let redirect = '';
     try {
       const res = await fetch('api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'ocap-stats' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      redirect = (await res.json()).redirect || '';
     } catch (e) {
       this.toast(t('n.error'), e.message, true);
       return;
     }
+    // After the OpenID Connect sign-in the provider ends its session too and sends the
+    // browser back here.
+    if (/^https?:\/\//.test(redirect)) { location.assign(redirect); return; }
     this.me = null;
     this.mine = new Set();
     this.renderAccount();
@@ -804,6 +826,7 @@ class StatsApp {
       } catch { /* no missions in the period */ }
       if (this.meToken !== token) return;
     }
+    if (!this.me.steamId) { $('meBody').replaceChildren(el('p', {}, t('me.noSteam', { name: this.cfg.loginName }))); return; }
     if (!this.me.names.length) { $('meBody').replaceChildren(el('p', {}, t('me.noGames'))); return; }
     if (!p) { $('meBody').replaceChildren(el('p', {}, t('me.noneInPeriod', { period: this.range }))); return; }
 
