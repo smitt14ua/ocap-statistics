@@ -404,6 +404,20 @@
                       "items": {
                         "$ref": "#/components/schemas/Player"
                       }
+                    },
+                    "killed": {
+                      "type": "array",
+                      "description": "Squads whose players this squad's players killed (enemies only), most first",
+                      "items": {
+                        "$ref": "#/components/schemas/SquadCount"
+                      }
+                    },
+                    "killedBy": {
+                      "type": "array",
+                      "description": "Squads whose players killed this squad's players (enemies only), most first",
+                      "items": {
+                        "$ref": "#/components/schemas/SquadCount"
+                      }
                     }
                   }
                 }
@@ -412,6 +426,80 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/squad-matrix": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Kills between squads",
+        "description": "Kills of players by players over the period, per pair of squads (the squad each played in during the mission). Squads hidden by the minimum missions setting are left out; \"\" is players without a squad.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/tag"
+          },
+          {
+            "$ref": "#/components/parameters/min_duration"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "filter": {
+                      "$ref": "#/components/schemas/Filter"
+                    },
+                    "matrix": {
+                      "type": "object",
+                      "properties": {
+                        "squads": {
+                          "type": "array",
+                          "description": "Squads in the matrix, most enemy kills first; \"\" last",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "cells": {
+                          "type": "array",
+                          "description": "Pairs with at least one kill, most enemy kills first",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "killer": {
+                                "type": "string"
+                              },
+                              "victim": {
+                                "type": "string"
+                              },
+                              "kills": {
+                                "type": "integer",
+                                "description": "Kills of enemies"
+                              },
+                              "teamKills": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -978,6 +1066,18 @@
           "nextRun": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "SquadCount": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Squad (\"\" = without a squad)"
+          },
+          "count": {
+            "type": "integer"
           }
         }
       },

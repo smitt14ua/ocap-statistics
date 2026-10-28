@@ -142,6 +142,17 @@
     .feed-filter .summary { color: var(--muted); font-size: 13px; }
     .feed-filter button[hidden] { display: none; }
     .now-as { display: block; color: var(--muted); font-size: 12px; }
+    .matrix { width: auto; font-variant-numeric: tabular-nums; }
+    .matrix th, .matrix td { text-align: center; border: 1px solid var(--border); padding: 6px 9px; }
+    .matrix th[scope=row] { text-align: left; }
+    .matrix th.corner { text-transform: none; letter-spacing: 0; font-weight: 400; }
+    .matrix th.mine { color: var(--accent); }
+    /* Red at up to 55 % keeps the text above 4.5:1 contrast. */
+    .matrix td.heat { background: rgb(229 62 62 / calc(var(--heat, 0) * .55)); }
+    .matrix td.self { background: var(--bg-3); }
+    .matrix td small.tk { display: block; font-size: 10px; white-space: nowrap; }
+    .matrix td.total { font-weight: 700; color: var(--text-strong); }
+    .matrix tbody tr:hover td.heat { box-shadow: inset 0 0 0 1px var(--border-hover); }
     /* Only short cells stay on one line; long weapon names and assist lists wrap, so the feed
        fits the modal without scrolling sideways. Names never break inside. */
     table.feed td.time, table.feed td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -206,6 +217,7 @@
         <button type="button" id="copyTop10" class="hidden" data-i18n="btn.copyTop10">Copy top 10</button>
         <button type="button" id="copyRotation" class="hidden" data-i18n="btn.copyRotation">Copy rotation</button>
         <button type="button" id="showMissions" data-i18n="btn.missions">Missions</button>
+        <button type="button" id="showMatrix" data-i18n="btn.matrix">Squad vs squad</button>
         <button type="button" id="showRotation" class="hidden" data-i18n="btn.rotation">Rotation</button>
         <a class="btn" href="api/docs" target="_blank" rel="noopener" data-i18n="btn.api">API</a>
       </div>

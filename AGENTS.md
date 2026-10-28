@@ -52,6 +52,7 @@ internal/store/users.go       admin users and sessions
 internal/store/accounts.go    player sessions (Steam sign-in), names of a Steam id
 internal/report/report.go     aggregation over a period: Player, Squad, Totals, achievements, rotation, sorting
 internal/report/identity.go   Identities: names of one Steam account merged into one player, Renamer for kills/assists
+internal/report/matrix.go     SquadMatrix: kills between squads (store.Store.SquadKills), Rivals of a squad
 internal/report/columns.go    custom columns: Column, Variables, NormalizeColumns, ApplyColumns, Preview
 internal/formula/formula.go   formula language: lexer, parser, evaluator (no reflection, no eval)
 internal/settings/settings.go runtime settings: config defaults + admin overrides stored in meta table

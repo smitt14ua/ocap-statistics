@@ -109,6 +109,7 @@ type built struct {
 	longest *store.Kill
 	ids     *report.Identities
 	names   *report.Renamer // players of the filter's missions
+	matrix  report.SquadMatrix
 }
 
 // resultCache caches aggregations per filter. Concurrent requests for the same filter share

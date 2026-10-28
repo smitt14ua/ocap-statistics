@@ -77,6 +77,7 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("GET /api/v1/players/{name}", s.cached(s.player))
 	mux.Handle("GET /api/v1/squads", s.cached(s.squads))
 	mux.Handle("GET /api/v1/squads/{name}", s.cached(s.squad))
+	mux.Handle("GET /api/v1/squad-matrix", s.cached(s.squadMatrix))
 	mux.Handle("GET /api/v1/achievements", s.cached(s.achievements))
 	mux.Handle("GET /api/v1/rotation", s.cached(s.rotation))
 

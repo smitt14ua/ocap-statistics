@@ -218,6 +218,7 @@ class StatsApp {
     $('copyRotation').addEventListener('click', () => this.copyRotation());
     $('showRotation').addEventListener('click', () => this.openRotation());
     $('showMissions').addEventListener('click', () => this.openMissions());
+    $('showMatrix').addEventListener('click', () => this.openMatrix());
     $('detailBack').addEventListener('click', () => this.backDetail());
 
     document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', (e) => {
@@ -842,6 +843,9 @@ class StatsApp {
           ['col.kd', fmt(s.kd)], ['col.accuracy', fmt(s.accuracy)], ['tile.medical', fmtPoints(s.medicalPoints)], ['tile.treatments', s.treatments],
           ['tile.revives', s.revives], ...this.columns(true).map(c => [c.name, this.customValue(s, c), true]),
         ]),
+        el('div', { class: 'lists' },
+          this.list('list.victims', d.killed, (n) => this.openSquad(n)),
+          this.list('list.killedBy', d.killedBy, (n) => this.openSquad(n))),
         el('div', { style: 'height:16px' }),
         this.dataTable(['col.name', 'col.tag', 'col.missions', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.medical', 'col.accuracy', 'col.kd'],
           d.members.map(p => {
@@ -880,6 +884,60 @@ class StatsApp {
           }), [0, false], [0, 3, 4]) : el('p', { class: 'muted' }, t('n.noMissions')),
       ];
     });
+  }
+
+  // --- squad vs squad -----------------------------------------------------------------
+
+  // openMatrix shows the kills between squads as a heat map: rows killed, columns died.
+  openMatrix() {
+    this.showDetail(t('matrix.title'), async (view) => {
+      const { matrix } = await apiGet(`squad-matrix?${this.query()}`);
+      const note = el('p', { class: 'subtitle' }, `${this.periodText()} · ${t('matrix.note')}`);
+      if (!matrix.cells.length) return [note, el('p', { class: 'muted' }, t('matrix.empty'))];
+      // A dozen squads fit a screen; the rest are a click away.
+      const top = 12, squads = matrix.squads;
+      const body = el('div');
+      const toggle = squads.length > top ? el('button', { type: 'button', class: 'small' }) : null;
+      const render = () => {
+        body.replaceChildren(this.matrixTable(matrix, view.all ? squads : squads.slice(0, top)));
+        if (toggle) toggle.textContent = view.all ? t('matrix.top', { n: top }) : t('matrix.all', { n: squads.length });
+      };
+      if (toggle) toggle.addEventListener('click', () => { view.all = !view.all; render(); });
+      render();
+      return [note, toggle, body];
+    });
+  }
+
+  matrixTable(matrix, squads) {
+    const cells = new Map(matrix.cells.map(c => [`${c.killer}\n${c.victim}`, c]));
+    const max = Math.max(1, ...matrix.cells.map(c => c.kills));
+    const kills = new Map(), deaths = new Map();
+    for (const c of matrix.cells) {
+      kills.set(c.killer, (kills.get(c.killer) || 0) + c.kills);
+      deaths.set(c.victim, (deaths.get(c.victim) || 0) + c.kills);
+    }
+    const mine = new Set([...this.mySquads()].map(s => s.toLowerCase()));
+    const isMine = (s) => s !== '' && mine.has(s.toLowerCase());
+    const label = (s) => s || t('noSquad');
+    const head = el('tr', {}, el('th', { scope: 'col', class: 'corner' }, t('matrix.corner')),
+      squads.map(s => el('th', { scope: 'col', class: isMine(s) ? 'mine' : null }, label(s))),
+      el('th', { scope: 'col' }, t('matrix.total')));
+    const rows = squads.map(k => el('tr', {},
+      el('th', { scope: 'row', class: isMine(k) ? 'mine' : null },
+        el('button', { type: 'button', class: 'link', onclick: () => this.openSquad(k) }, label(k))),
+      squads.map(v => {
+        const c = cells.get(`${k}\n${v}`);
+        const n = c ? c.kills : 0, tk = c ? c.teamKills : 0;
+        const title = [n ? t('matrix.cell', { killer: label(k), victim: label(v), n }) : null, tk ? t('matrix.teamKills', { n: tk }) : null].filter(Boolean).join(' · ');
+        // The cell's share of the largest number shades it; the number itself stays readable.
+        return el('td', { class: k === v ? 'self' : 'heat', style: n ? `--heat:${(n / max).toFixed(3)}` : null, title: title || null },
+          n || null, tk ? el('small', { class: 'tk' }, `${t('col.teamKills')} ${tk}`) : null);
+      }),
+      el('td', { class: 'total' }, kills.get(k) || 0)));
+    const foot = el('tr', {}, el('th', { scope: 'row' }, t('matrix.total')),
+      squads.map(v => el('td', { class: 'total' }, deaths.get(v) || 0)), el('td'));
+    return el('div', { class: 'table-wrap', tabindex: 0 },
+      el('table', { class: 'matrix' }, el('thead', {}, head), el('tbody', {}, rows, foot)));
   }
 
   openMission(id, name) {

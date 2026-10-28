@@ -444,6 +444,27 @@ func TestPlayersMergedBySteam(t *testing.T) {
 	}
 }
 
+func TestSquadMatrix(t *testing.T) {
+	_, sy, h := setup(t)
+	runSync(t, sy)
+	// Each of the two missions: Smith [MILF] kills Enemy [SOKIL] and team-kills Rookie [~milf~].
+	var d struct{ Matrix report.SquadMatrix }
+	get(t, h, "/api/v1/squad-matrix", &d)
+	if !slices.Equal(d.Matrix.Squads, []string{"MILF", "SOKIL"}) {
+		t.Errorf("squads: %v", d.Matrix.Squads)
+	}
+	want := []report.MatrixCell{{Killer: "MILF", Victim: "SOKIL", Kills: 2}, {Killer: "MILF", Victim: "MILF", TeamKills: 2}}
+	if !slices.Equal(d.Matrix.Cells, want) {
+		t.Errorf("cells: %+v", d.Matrix.Cells)
+	}
+
+	var sq struct{ Killed, KilledBy []report.SquadCount }
+	get(t, h, "/api/v1/squads/sokil", &sq)
+	if len(sq.Killed) != 0 || !slices.Equal(sq.KilledBy, []report.SquadCount{{Name: "MILF", Count: 2}}) {
+		t.Errorf("SOKIL rivals: %+v", sq)
+	}
+}
+
 func TestSyncRequiresToken(t *testing.T) {
 	_, _, h := setup(t)
 	rec := httptest.NewRecorder()

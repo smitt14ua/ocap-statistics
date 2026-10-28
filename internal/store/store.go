@@ -769,6 +769,37 @@ func (s *Store) Kills(ctx context.Context, f Filter, q KillQuery) ([]Kill, error
 	return out, rows.Err()
 }
 
+// SquadKill counts kills of players by players between two squads ("" = no squad).
+type SquadKill struct {
+	KillerSquad string
+	VictimSquad string
+	Kills       int // kills of enemies
+	TeamKills   int
+}
+
+// SquadKills counts the kills of players by other players between squads in missions
+// matching the filter, as recorded (squads are not merged case-insensitively here).
+func (s *Store) SquadKills(ctx context.Context, f Filter) ([]SquadKill, error) {
+	where, args := f.where("m")
+	rows, err := s.db.QueryContext(ctx, `SELECT k.killer_squad, k.victim_squad, SUM(1 - k.team_kill), SUM(k.team_kill)
+		FROM kills k JOIN missions m ON m.id = k.mission_id
+		WHERE `+where+` AND k.killer_is_player = 1 AND k.victim_kind = 'player' AND k.killer <> k.victim
+		GROUP BY k.killer_squad, k.victim_squad`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SquadKill
+	for rows.Next() {
+		var k SquadKill
+		if err := rows.Scan(&k.KillerSquad, &k.VictimSquad, &k.Kills, &k.TeamKills); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
 // Assists returns the kill assists of one mission in recording order.
 func (s *Store) Assists(ctx context.Context, missionID int64) ([]stats.AssistRow, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT frame, player, player_squad, kind, killer, victim, victim_squad, victim_kind

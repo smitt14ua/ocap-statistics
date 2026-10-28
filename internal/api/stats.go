@@ -79,6 +79,10 @@ func (s *Server) report(ctx context.Context, f store.Filter) (built, error) {
 		if err != nil {
 			return built{}, err
 		}
+		squadKills, err := s.store.SquadKills(ctx, f)
+		if err != nil {
+			return built{}, err
+		}
 		ids, err := s.identities(ctx)
 		if err != nil {
 			return built{}, err
@@ -92,7 +96,7 @@ func (s *Server) report(ctx context.Context, f store.Filter) (built, error) {
 		res.ApplyColumns(set.Columns)
 		res.Hide(set.MinMissions)
 		res.SetAliases(ids)
-		return built{res: res, longest: longest, ids: ids, names: names}, nil
+		return built{res: res, longest: longest, ids: ids, names: names, matrix: res.SquadMatrix(squadKills)}, nil
 	})
 }
 
@@ -629,7 +633,22 @@ func (s *Server) squad(r *http.Request) (response, error) {
 	}
 	members := b.res.SquadMembers(sq.Name, s.settings.Get().Columns)
 	report.SortPlayers(members, "kills", true)
-	return jsonResponse(map[string]any{"filter": outFilter(f), "squad": sq, "members": nonNil(members)})
+	killed, killedBy := b.matrix.Rivals(sq.Name)
+	return jsonResponse(map[string]any{"filter": outFilter(f), "squad": sq, "members": nonNil(members),
+		"killed": nonNil(killed), "killedBy": nonNil(killedBy)})
+}
+
+// squadMatrix returns who killed whom between squads.
+func (s *Server) squadMatrix(r *http.Request) (response, error) {
+	f, err := s.filter(r)
+	if err != nil {
+		return response{}, err
+	}
+	b, err := s.report(r.Context(), f)
+	if err != nil {
+		return response{}, err
+	}
+	return jsonResponse(map[string]any{"filter": outFilter(f), "matrix": b.matrix})
 }
 
 func (s *Server) achievements(r *http.Request) (response, error) {

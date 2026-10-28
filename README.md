@@ -12,7 +12,7 @@ OCAP ──(every 10 min: list of recordings)──► ocap-stats ──► SQLi
 ## Features
 
 - **Automatic ingestion.** New recordings are picked up on a schedule; recordings deleted or re-tagged in OCAP disappear from the statistics. Recordings can be read straight from OCAP's data directory when the service runs on the same host.
-- **Statistics:** kills, deaths, team kills, destroyed vehicles, kill assists (kills by other crew members of your vehicle, deaths of enemies you hit shortly before), medical points (ACE treatments of other players and revives), accuracy, attendance, K/D, achievements, squad leaderboard, rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), a list of missions with a page for each: result, sides, players and squads, a kill feed showing who killed whom and who got the assists, and a link to the replay in OCAP.
+- **Statistics:** kills, deaths, team kills, destroyed vehicles, kill assists (kills by other crew members of your vehicle, deaths of enemies you hit shortly before), medical points (ACE treatments of other players and revives), accuracy, attendance, K/D, achievements, squad leaderboard, squad vs squad (a heat map of who killed whom), rotation score between groups of squads, per-player profiles (mission history, favourite weapons, victims and killers), a list of missions with a page for each: result, sides, players and squads, a kill feed showing who killed whom and who got the assists, and a link to the replay in OCAP.
 - **Squads from nicknames.** `[ALPHA] John` is player `John` in squad `ALPHA`; recruits (`[~ALPHA~] John`) count in their squad like everyone else. The nickname format, squad aliases and ignored names are configurable.
 - **REST API** with OpenAPI documentation at `/api/docs`, CSV export, ETag caching and CORS.
 - **Web page** with filters, player/squad views, Excel export, top-10 and rotation screenshots to the clipboard and links to the replays in OCAP.
@@ -139,7 +139,8 @@ Common parameters of the statistics endpoints:
 | `GET /api/v1/players` | Player leaderboard. `search`, `squad=ALPHA,BRAVO` (`-` = no squad), `sort`, `order`, `limit`, `offset`, `format=csv` |
 | `GET /api/v1/players/{name}` | Player profile (name without the squad prefix) |
 | `GET /api/v1/squads` | Squad leaderboard (same list parameters) |
-| `GET /api/v1/squads/{name}` | A squad and its members |
+| `GET /api/v1/squads/{name}` | A squad, its members and the squads it killed most and was killed by most |
+| `GET /api/v1/squad-matrix` | Kills of players by players between every pair of squads |
 | `GET /api/v1/achievements` | Achievements of a period |
 | `GET /api/v1/rotation` | Rotation score and match log |
 | `GET /api/v1/missions` | Processed missions of a period |
