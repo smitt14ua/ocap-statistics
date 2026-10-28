@@ -192,7 +192,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Player name without the squad prefix"
+            "description": "Player name without the squad prefix; any of the player's aliases finds it too"
           },
           {
             "$ref": "#/components/parameters/from"
@@ -986,7 +986,12 @@
         "properties": {
           "name": {
             "type": "string",
-            "description": "Name without the squad prefix"
+            "description": "Name without the squad prefix: the most recent name of the player's Steam account, when recordings carry Steam ids"
+          },
+          "aliases": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Other names the player's Steam account played under, most recent first; their missions count for this player. Omitted when there are none"
           },
           "squad": {
             "type": "string",
@@ -1310,7 +1315,12 @@
         "type": "object",
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Name played under in this mission, as in its kills and assists"
+          },
+          "player": {
+            "type": "string",
+            "description": "The player's current name (see Player.aliases), when it differs from name; use it for /players/{name}"
           },
           "squad": {
             "type": "string"

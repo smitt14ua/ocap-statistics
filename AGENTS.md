@@ -51,6 +51,7 @@ internal/store/store.go       SQLite schema, migrate(), missions/digests/rows/ki
 internal/store/users.go       admin users and sessions
 internal/store/accounts.go    player sessions (Steam sign-in), names of a Steam id
 internal/report/report.go     aggregation over a period: Player, Squad, Totals, achievements, rotation, sorting
+internal/report/identity.go   Identities: names of one Steam account merged into one player, Renamer for kills/assists
 internal/report/columns.go    custom columns: Column, Variables, NormalizeColumns, ApplyColumns, Preview
 internal/formula/formula.go   formula language: lexer, parser, evaluator (no reflection, no eval)
 internal/settings/settings.go runtime settings: config defaults + admin overrides stored in meta table
@@ -128,4 +129,5 @@ docs/decisions.md             why things are built the way they are (SQLite, dig
 - OCAP writes recordings received over its WebSocket ingest with mode 0600 (`os.CreateTemp`), so a mounted data dir may hold files this service cannot read; `ocap.Client.OpenMission` downloads over HTTP on any open error, not only a missing file.
 - A mission OCAP receives over its WebSocket ingest is listed from its start with `conversionStatus` `streaming` but gets its `.json.gz` only when it ends; the syncer skips such operations (`ocap.Operation.Live`), and `store.Store.UpsertOperations` retries failed and missing recordings whose OCAP status changed.
 - Medical data comes only from `medicalSnapshot` events (players only): full snapshots or diffs (`diffOf` + changed fields under `set`), whose `activity` is the last few lines of the ACE log, localized; `digest.Parse` keeps the lines new since the previous snapshot. `PlayerRow.SteamID` must never reach a public response (`TestMedicalPoints` checks).
+- Players are merged by Steam account when read, not when stored: `Server.report` renames rows with `report.Identities` (cached per generation in `Server.identities`) before `report.Build`, and a handler that aggregates names from `kills` over a period must rename them with the `report.Renamer` too, or the old names count apart. The mission endpoint deliberately keeps the names of the mission and adds `player` (the current name) instead.
 - Steam sign-in (`internal/api/account.go`): only `/api/auth/me` returns a Steam id, the viewer's own; it is not cached and not under `/api/v1/`, so it gets no CORS headers. The page highlights a player by the names `store.Store.SteamNames` returns, not by id. `TestSteamLogin` runs the OpenID flow against a fake provider that confirms only unchanged assertions.

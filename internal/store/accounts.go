@@ -32,6 +32,35 @@ func (s *Store) DeletePlayerSession(ctx context.Context, tokenHash string) error
 	return err
 }
 
+// SteamAlias is a name a Steam account played under, with its latest processed mission.
+type SteamAlias struct {
+	SteamID  string
+	Name     string
+	LastDate string
+	LastID   int64
+}
+
+// SteamAliases returns every name each Steam account played under in processed missions.
+func (s *Store) SteamAliases(ctx context.Context) ([]SteamAlias, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT p.steam_id, p.name, MAX(m.date), MAX(m.id)
+		FROM mission_players p JOIN missions m ON m.id = p.mission_id
+		WHERE p.steam_id != '' AND m.status = 'done'
+		GROUP BY p.steam_id, p.name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SteamAlias
+	for rows.Next() {
+		var a SteamAlias
+		if err := rows.Scan(&a.SteamID, &a.Name, &a.LastDate, &a.LastID); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 // SteamName is a name a Steam account played under.
 type SteamName struct {
 	Name     string `json:"name"`
@@ -39,8 +68,8 @@ type SteamName struct {
 	Missions int    `json:"missions"`
 }
 
-// SteamNames returns the names a Steam account played under, the most recent first.
-// Statistics are merged by name, so these names are the player on the site.
+// SteamNames returns the names a Steam account played under, the most recent first. The
+// first is the account's player on the site (report.Identities merges the others into it).
 func (s *Store) SteamNames(ctx context.Context, steamID string) ([]SteamName, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT p.name, MAX(m.date), COUNT(*)
 		FROM mission_players p JOIN missions m ON m.id = p.mission_id

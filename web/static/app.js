@@ -801,11 +801,13 @@ class StatsApp {
   }
 
   openPlayer(name) {
-    this.showDetail(name, async () => {
+    this.showDetail(name, async (view) => {
       const d = await apiGet(`players/${encodeURIComponent(name)}?${this.query()}`);
       const p = d.player, lk = d.longestKill;
+      view.title = p.name; // an older name of a player opens it under its current one
       return [
         el('p', { class: 'subtitle' }, [p.squadRaw ? `[${p.squadRaw}]` : null, this.range, t('detail.firstLast', { first: p.firstSeen, last: p.lastSeen })].filter(Boolean).join(' · ')),
+        p.aliases && p.aliases.length ? el('p', { class: 'subtitle' }, t('me.alsoAs', { names: p.aliases.join(', ') })) : null,
         this.tiles([
           ['col.kills', p.kills], ['col.deaths', p.deaths], ['col.teamKills.title', p.teamKills], ['col.vehicles.title', p.vehiclesDestroyed],
           ['tile.assists', p.killAssists], ['col.kd', fmt(p.kd)], ['col.accuracy', fmt(p.accuracy)], ['tile.missions', p.attendance],
@@ -902,7 +904,9 @@ class StatsApp {
           const open = () => { feed.select(p.name); tabs.show('feed'); };
           const mine = this.mine.has(p.name);
           const tr = el('tr', { class: mine ? 'clickable mine' : 'clickable' },
-            el('td', { 'data-sort': p.name }, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, p.name), mine ? this.youBadge(false) : null),
+            el('td', { 'data-sort': p.name }, el('button', { type: 'button', class: 'link', onclick: (e) => { e.stopPropagation(); open(); } }, p.name), mine ? this.youBadge(false) : null,
+              // The name played under here is shown, and the current one of a player who has renamed since.
+              p.player ? el('small', { class: 'now-as' }, t('mission.nowAs', { name: p.player })) : null),
             el('td', {}, p.squadRaw || '-'), el('td', {}, sideDot(p.side), p.side),
             el('td', {}, p.kills), el('td', {}, p.deaths), el('td', {}, p.teamKills), el('td', {}, p.vehiclesDestroyed), el('td', {}, p.killAssists),
             el('td', {}, this.medical(p)), el('td', {}, p.shotsFired), el('td', {}, p.hits), el('td', {}, p.shotsFired ? fmt(Math.min(100, p.hits / p.shotsFired * 100)) : fmt(0)));
@@ -1027,6 +1031,12 @@ class StatsApp {
       [...d.players].sort((a, b) => a.name.localeCompare(b.name)).map(p => el('option', { value: p.name }, p.name)));
     // Picking "everyone" again in a long list is tedious, so a selected player has a reset button.
     const reset = el('button', { type: 'button', class: 'small', hidden: true }, el('span', { 'aria-hidden': 'true' }, '×'), t('feed.reset'));
+    // The profile opens under the player's current name.
+    const profile = el('button', { type: 'button', class: 'small', hidden: true }, t('feed.profile'));
+    profile.addEventListener('click', () => {
+      const p = d.players.find(x => x.name === select.value);
+      if (p) this.openPlayer(p.player || p.name);
+    });
     const summary = el('span', { class: 'summary', 'aria-live': 'polite' });
     const body = el('tbody');
     // Only time and distance sort; the feed opens in time order.
@@ -1039,7 +1049,7 @@ class StatsApp {
     const render = () => {
       const me = select.value;
       view.player = me;
-      reset.hidden = !me;
+      reset.hidden = profile.hidden = !me;
       const list = me ? events.filter(e => involves(e, me)) : events;
       const p = me && d.players.find(x => x.name === me);
       summary.textContent = p ? t('feed.summary', { k: p.kills, d: p.deaths, a: p.killAssists, v: p.vehiclesDestroyed }) : '';
@@ -1053,7 +1063,7 @@ class StatsApp {
     render();
     return {
       node: [
-        el('div', { class: 'feed-filter' }, el('label', { for: 'feedPlayer' }, t('col.player')), select, reset, summary),
+        el('div', { class: 'feed-filter' }, el('label', { for: 'feedPlayer' }, t('col.player')), select, reset, profile, summary),
         el('div', { class: 'table-wrap', tabindex: 0 }, table),
       ],
       select: (name) => { select.value = name; render(); },

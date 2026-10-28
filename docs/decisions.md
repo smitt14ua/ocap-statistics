@@ -64,10 +64,16 @@ The project started for one community but is published for any OCAP server. Comm
 
 OCAP records no "X treated Y" event. Recent versions write `medicalSnapshot` events with the patient's ACE activity log: localized text lines such as "Name has bandaged patient", of which ACE keeps only the last few. The digest therefore keeps each new log line (found by overlapping consecutive snapshots) with the medic resolved by name, and `ace3Unconscious` changes; counting stays independent of the game language because every line counts as one treatment. Medical points are weights over treatments and revives applied in `report.Build`, so tuning them in the admin panel needs no recompute.
 
-Players' Steam ids (`playerUid` of the snapshots) are stored per mission for the Steam sign-in (14), but no public endpoint, CSV or page shows them, and players are still merged by nickname.
+Players' Steam ids (`playerUid` of the snapshots) are stored per mission for the Steam sign-in (14) and for merging a player's names (15), but no public endpoint, CSV or page shows them.
 
-## 14. Steam sign-in only recognises the viewer; statistics stay public and merged by name
+## 14. Steam sign-in only recognises the viewer; statistics stay public
 
 Players can sign in with Steam (OpenID 2.0, optional, `steam.login`) to see their own statistics highlighted. OpenID needs no API key or registration with Steam, which keeps deployment as simple as before. Steam's answer is trusted only after Steam itself confirms the signature (`check_authentication`), and only when it is addressed to the sign-in this browser started (state cookie), signs the identity and return address, and carries a fresh, unused nonce — the claimed id in the URL alone proves nothing.
 
-A Steam account maps to the names it played under in recordings that carry Steam ids (`mission_players.steam_id`); the page then highlights those names. Statistics are not re-keyed by Steam id: older recordings have none, and merging by name keeps one player's history in one row. Player sessions are separate from admin sessions, grant no rights, and `/api/auth/me` is the only response that contains a Steam id, the viewer's own; it is not part of the public API.
+A Steam account maps to the names it played under in recordings that carry Steam ids (`mission_players.steam_id`); since those names are merged into one player (15), the page highlights the account's most recent name. Player sessions are separate from admin sessions, grant no rights, and `/api/auth/me` is the only response that contains a Steam id, the viewer's own; it is not part of the public API.
+
+## 15. A player's names are merged by Steam account
+
+Players rename themselves, and every name used to be a player of its own. Since recordings carry Steam ids (13), the names one Steam account played under are merged into one player, shown under the account's most recent name; the others are listed as aliases, and any of them opens the player. Missions recorded before OCAP wrote Steam ids join that player by name when the name belongs to one Steam account only; a name several accounts played under stays separate there, because it cannot be told whose it was. Two accounts that now play under the same name stay merged, as before.
+
+The merge (`report.Identities`) is applied when the statistics are read, over all processed missions, so it needs no recompute and follows renames at once; `mission_players` keeps the names as recorded. A mission page shows the names played under in that mission, with the current one next to a renamed player and linking to the profile: it is a record of that game. It publishes that the merged names belong to one account, but never the Steam id itself.

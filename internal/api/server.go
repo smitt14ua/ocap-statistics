@@ -13,9 +13,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/smitt14ua/ocap-statistics/internal/auth"
 	"github.com/smitt14ua/ocap-statistics/internal/config"
+	"github.com/smitt14ua/ocap-statistics/internal/report"
 	"github.com/smitt14ua/ocap-statistics/internal/settings"
 	"github.com/smitt14ua/ocap-statistics/internal/store"
 	"github.com/smitt14ua/ocap-statistics/internal/syncer"
@@ -43,6 +45,10 @@ type Server struct {
 	steam     *auth.Steam
 	// hashSlots bounds concurrent password hashing (CPU-heavy by design).
 	hashSlots chan struct{}
+
+	idsMu  sync.Mutex
+	ids    *report.Identities // of data generation idsGen
+	idsGen int64
 }
 
 func New(cfg config.Config, build BuildInfo, st *store.Store, sm *settings.Manager, sy *syncer.Syncer, web fs.FS, log *slog.Logger) *Server {

@@ -71,7 +71,7 @@ func (s *Server) report(ctx context.Context, f store.Filter) (built, error) {
 		if err != nil {
 			return built{}, err
 		}
-		rows, err := s.store.Rows(ctx, f, "")
+		rows, err := s.store.Rows(ctx, f)
 		if err != nil {
 			return built{}, err
 		}
@@ -79,12 +79,37 @@ func (s *Server) report(ctx context.Context, f store.Filter) (built, error) {
 		if err != nil {
 			return built{}, err
 		}
+		ids, err := s.identities(ctx)
+		if err != nil {
+			return built{}, err
+		}
+		names := ids.Merge(rows)
+		if longest != nil {
+			names.Kill(longest)
+		}
 		set := s.settings.Get()
 		res := report.Build(missions, rows, set.Medical)
 		res.ApplyColumns(set.Columns)
 		res.Hide(set.MinMissions)
-		return built{res: res, longest: longest}, nil
+		res.SetAliases(ids)
+		return built{res: res, longest: longest, ids: ids, names: names}, nil
 	})
+}
+
+// identities returns the players merged by Steam account, computed once per data generation.
+func (s *Server) identities(ctx context.Context) (*report.Identities, error) {
+	gen := s.store.Generation()
+	s.idsMu.Lock()
+	defer s.idsMu.Unlock()
+	if s.ids != nil && s.idsGen == gen {
+		return s.ids, nil
+	}
+	aliases, err := s.store.SteamAliases(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.ids, s.idsGen = report.NewIdentities(aliases), gen
+	return s.ids, nil
 }
 
 type listParams struct {
@@ -320,6 +345,11 @@ func (s *Server) mission(r *http.Request) (response, error) {
 	if err != nil {
 		return response{}, err
 	}
+	// A mission shows the names played under in it; Player is the name of the profile.
+	ids, err := s.identities(ctx)
+	if err != nil {
+		return response{}, err
+	}
 	med := s.settings.Get().Medical
 	res := report.Build([]store.Mission{m}, rows, med)
 	kills, err := s.store.Kills(ctx, store.Filter{}, store.KillQuery{MissionID: id})
@@ -331,7 +361,9 @@ func (s *Server) mission(r *http.Request) (response, error) {
 		return response{}, err
 	}
 	type missionPlayer struct {
-		Name              string  `json:"name"`
+		Name   string `json:"name"`
+		Player string `json:"player,omitempty"` // current name, when it differs
+
 		Squad             string  `json:"squad"`
 		SquadRaw          string  `json:"squadRaw"`
 		Side              string  `json:"side"`
@@ -348,8 +380,12 @@ func (s *Server) mission(r *http.Request) (response, error) {
 	}
 	players := make([]missionPlayer, 0, len(rows))
 	for _, row := range rows {
+		player := ids.Name(row.Name, row.SteamID)
+		if player == row.Name {
+			player = ""
+		}
 		players = append(players, missionPlayer{
-			Name: row.Name, Squad: row.Squad, SquadRaw: row.SquadRaw, Side: row.Side,
+			Name: row.Name, Player: player, Squad: row.Squad, SquadRaw: row.SquadRaw, Side: row.Side,
 			Kills: row.Kills, Deaths: row.Deaths, TeamKills: row.TeamKills, VehiclesDestroyed: row.VehicleKills,
 			KillAssists: row.KillAssists, ShotsFired: row.Shots, Hits: row.Hits,
 			Treatments: row.Treatments, Revives: row.Revives, MedicalPoints: med.Points(row.Treatments, row.Revives),
@@ -376,7 +412,9 @@ func (s *Server) players(r *http.Request) (response, error) {
 	}
 	list := make([]report.Player, 0, len(b.res.Players))
 	for _, pl := range b.res.Players {
-		if p.search != "" && !strings.Contains(strings.ToLower(pl.Name), p.search) {
+		if p.search != "" && !slices.ContainsFunc(append([]string{pl.Name}, pl.Aliases...), func(n string) bool {
+			return strings.Contains(strings.ToLower(n), p.search)
+		}) {
 			continue
 		}
 		if !p.wantSquad(pl.Squad) {
@@ -435,17 +473,24 @@ func (s *Server) player(r *http.Request) (response, error) {
 		return response{}, err
 	}
 	res := b.res
+	// Any name of a player finds it, also one it no longer plays under.
+	name = b.ids.Name(name, "")
 	pl, ok := res.FindPlayer(name)
 	if !ok {
 		return response{}, notFound("player")
 	}
-	rows, err := s.store.Rows(ctx, f, name)
+	rows := res.PlayerRows(name)
+	all, err := s.store.Kills(ctx, f, store.KillQuery{Players: b.ids.Names(name)})
 	if err != nil {
 		return response{}, err
 	}
-	kills, err := s.store.Kills(ctx, f, store.KillQuery{Player: name})
-	if err != nil {
-		return response{}, err
+	// A name several Steam accounts played under matches kills of the others too.
+	kills := all[:0]
+	for _, k := range all {
+		b.names.Kill(&k)
+		if k.Killer == name || k.Victim == name {
+			kills = append(kills, k)
+		}
 	}
 
 	missionByID := make(map[int64]store.Mission, len(res.Missions))

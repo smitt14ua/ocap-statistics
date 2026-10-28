@@ -107,6 +107,8 @@ func cacheKey(path string, q url.Values) string {
 type built struct {
 	res     *report.Result
 	longest *store.Kill
+	ids     *report.Identities
+	names   *report.Renamer // players of the filter's missions
 }
 
 // resultCache caches aggregations per filter. Concurrent requests for the same filter share

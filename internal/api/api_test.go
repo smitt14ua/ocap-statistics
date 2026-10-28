@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,7 @@ import (
 	"github.com/smitt14ua/ocap-statistics/internal/auth"
 	"github.com/smitt14ua/ocap-statistics/internal/config"
 	"github.com/smitt14ua/ocap-statistics/internal/ocap"
+	"github.com/smitt14ua/ocap-statistics/internal/report"
 	"github.com/smitt14ua/ocap-statistics/internal/settings"
 	"github.com/smitt14ua/ocap-statistics/internal/store"
 	"github.com/smitt14ua/ocap-statistics/internal/syncer"
@@ -30,8 +32,9 @@ import (
 type fakeOCAP struct {
 	mu        sync.Mutex
 	ops       []ocap.Operation
-	absent    map[string]bool // filenames without a data file (404)
-	recording []byte
+	absent    map[string]bool   // filenames without a data file (404)
+	files     map[string][]byte // recordings of particular filenames
+	recording []byte            // the recording of every other filename
 	downloads atomic.Int32
 }
 
@@ -50,16 +53,21 @@ func (f *fakeOCAP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(out)
 	case strings.HasPrefix(r.URL.Path, "/data/"):
 		f.downloads.Add(1)
+		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/data/"), ".json.gz")
 		f.mu.Lock()
-		absent := f.absent[strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/data/"), ".json.gz")]
+		absent := f.absent[name]
+		rec, ok := f.files[name]
 		f.mu.Unlock()
 		if absent {
 			http.NotFound(w, r)
 			return
 		}
+		if !ok {
+			rec = f.recording
+		}
 		var buf bytes.Buffer
 		zw := gzip.NewWriter(&buf)
-		_, _ = zw.Write(f.recording)
+		_, _ = zw.Write(rec)
 		_ = zw.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Encoding", "gzip")
@@ -374,6 +382,65 @@ func TestLiveRecording(t *testing.T) {
 	runSync(t, sy)
 	if c := counts(); c != (store.Counts{Total: 4, Done: 4}) {
 		t.Errorf("after OCAP deleted them: %+v", c)
+	}
+}
+
+func TestPlayersMergedBySteam(t *testing.T) {
+	fake, sy, h := setup(t)
+	fake.mu.Lock()
+	// Smith (Steam id in the fixture) is Smithy in the latest mission and played an older one
+	// before OCAP recorded Steam ids.
+	fake.files = map[string][]byte{
+		"Coop_2_20261002": bytes.ReplaceAll(fake.recording, []byte("[MILF] Smith"), []byte("[MILF] Smithy")),
+		"Coop_0_20260930": bytes.ReplaceAll(fake.recording, []byte(`"playerUid": "`+testSteamID+`", `), nil),
+	}
+	fake.ops = append(fake.ops, ocap.Operation{ID: 4, Filename: "Coop_0_20260930", MissionName: "Coop_0", WorldName: "altis",
+		Date: "2026-09-30", Tag: "COOP"})
+	fake.mu.Unlock()
+	runSync(t, sy)
+
+	var list struct{ Players []report.Player }
+	get(t, h, "/api/v1/players", &list)
+	var names []string
+	for _, p := range list.Players {
+		names = append(names, p.Name)
+		if p.Name == "Smithy" && (p.Attendance != 3 || !slices.Equal(p.Aliases, []string{"Smith"})) {
+			t.Errorf("Smithy = %+v, want 3 missions and the alias Smith", p)
+		}
+	}
+	if !slices.Contains(names, "Smithy") || slices.Contains(names, "Smith") {
+		t.Errorf("players: %v", names)
+	}
+
+	// The old name opens the merged player, with the kills of all its names.
+	var profile struct {
+		Player   report.Player
+		Missions []missionRow
+		Victims  []countItem
+	}
+	get(t, h, "/api/v1/players/Smith", &profile)
+	if profile.Player.Name != "Smithy" || len(profile.Missions) != 3 {
+		t.Errorf("profile of Smith: %+v, %d missions", profile.Player, len(profile.Missions))
+	}
+	if !slices.Contains(profile.Victims, countItem{Name: "Rookie", Count: 3}) {
+		t.Errorf("victims: %+v", profile.Victims)
+	}
+
+	// A mission shows the name played under in it, and the current one for the profile.
+	var m struct {
+		Players []struct{ Name, Player string }
+		Kills   []store.Kill
+	}
+	rec := get(t, h, "/api/v1/missions/1", &m)
+	if strings.Contains(rec.Body.String(), testSteamID) {
+		t.Errorf("mission 1 publishes the Steam id: %s", rec.Body)
+	}
+	if !slices.Contains(m.Players, struct{ Name, Player string }{"Smith", "Smithy"}) ||
+		!slices.Contains(m.Players, struct{ Name, Player string }{"Rookie", ""}) {
+		t.Errorf("mission players: %+v", m.Players)
+	}
+	if !slices.ContainsFunc(m.Kills, func(k store.Kill) bool { return k.Killer == "Smith" && k.Victim == "Rookie" }) {
+		t.Errorf("kills: %+v", m.Kills)
 	}
 }
 

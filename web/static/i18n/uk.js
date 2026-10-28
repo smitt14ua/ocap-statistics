@@ -376,6 +376,8 @@
   'mission.tab.feed': 'Стрічка вбивств',
   'feed.allPlayers': 'Усі',
   'feed.reset': 'Показати всіх',
+  'feed.profile': 'Профіль',
+  'mission.nowAs': 'тепер {name}',
   'feed.summary': 'вбивства {k} · смерті {d} · допомога {a} · техніка {v}',
   'feed.unknown': 'невідомо',
   'feed.suicide': 'самогубство',

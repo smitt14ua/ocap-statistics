@@ -117,7 +117,7 @@ Statistics settings (tags, start date, minimum duration, nickname format, aliase
 
 With `OCAPSTATS_STEAM_LOGIN=true` players can sign in with their Steam account (OpenID, no API key needed). The site then shows a card with their own statistics for the selected period, highlights their rows, squad and awards everywhere, and adds a "My profile" button. Nothing else changes: signed-in players get no extra rights, and statistics stay public.
 
-Players are recognised by the Steam id that recent OCAP versions write into recordings (`playerUid`), so only missions recorded with such a version link a Steam account to a name; older missions of the same name count as before, because statistics are merged by name. Steam ids are never shown on the site or in the API, except to the signed-in player themselves.
+Players are recognised by the Steam id that recent OCAP versions write into recordings (`playerUid`), so only missions recorded with such a version link a Steam account to a name; older missions of the same name count too (see "Players" under [How statistics are computed](#how-statistics-are-computed)). Steam ids are never shown on the site or in the API, except to the signed-in player themselves.
 
 Set `OCAPSTATS_PUBLIC_URL` when the address cannot be derived from the request (behind a proxy without `OCAPSTATS_TRUST_PROXY`, or under a path prefix).
 
@@ -175,6 +175,7 @@ Per mission:
 
 Over a period:
 
+- **Players:** a player is a name without the squad prefix. Names a Steam account played under (recent OCAP versions record Steam ids) are one player, shown under the most recent name, with the others as aliases; any of them opens the player. A mission's page keeps the names played under in it and shows a renamed player's current name next to the old one. Older missions without Steam ids count for that player when only one Steam account ever played under the name. Steam ids are never published.
 - **K/D:** kills / deaths (kills when there are no deaths).
 - **Kill assist:** a kill (not a team kill) made by another crew member of the vehicle the player sat in at that moment, so drivers and commanders get credit for their gunner's kills (crews are taken from the vehicle positions in the recording); and, unless turned off, the death of an enemy (player or AI) the player hit, or whose vehicle the player destroyed, in the last 5 minutes (`stats.assists.window`) before it, whoever or whatever killed it. Hits before the victim's previous death and hits on vehicles do not count; a player gets at most one assist per death and none for their own kill.
 - **Squads:** a player's results count towards the squad they played in during each mission, so a player who leaves a squad does not take its past results along. The players table shows the squad of the player's latest mission in the period (none if they last played without one). Squad names are merged case-insensitively and shown in their most common spelling.

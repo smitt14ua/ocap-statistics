@@ -376,6 +376,8 @@
   'mission.tab.feed': 'Přehled zabití',
   'feed.allPlayers': 'Všichni',
   'feed.reset': 'Zobrazit všechny',
+  'feed.profile': 'Profil',
+  'mission.nowAs': 'nyní {name}',
   'feed.summary': 'zabití {k} · úmrtí {d} · asistence {a} · vozidla {v}',
   'feed.unknown': 'neznámý',
   'feed.suicide': 'sebevražda',

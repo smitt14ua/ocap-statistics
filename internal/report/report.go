@@ -17,24 +17,26 @@ import (
 const NoSquad = "-"
 
 type Player struct {
-	Name              string  `json:"name"`
-	Squad             string  `json:"squad"`    // normalised squad of the latest mission ("" = played without a squad)
-	SquadRaw          string  `json:"squadRaw"` // squad as captured from the nickname, before aliases
-	Kills             int     `json:"kills"`
-	Deaths            int     `json:"deaths"`
-	TeamKills         int     `json:"teamKills"`
-	VehiclesDestroyed int     `json:"vehiclesDestroyed"`
-	KillAssists       int     `json:"killAssists"`
-	ShotsFired        int     `json:"shotsFired"`
-	Hits              int     `json:"hits"`
-	Treatments        int     `json:"treatments"`
-	Revives           int     `json:"revives"`
-	MedicalPoints     float64 `json:"medicalPoints"` // treatments and revives weighed by stats.Medical
-	Attendance        int     `json:"attendance"`
-	Accuracy          float64 `json:"accuracy"`
-	KD                float64 `json:"kd"` // kills / deaths (kills when there are no deaths)
-	FirstSeen         string  `json:"firstSeen"`
-	LastSeen          string  `json:"lastSeen"`
+	Name string `json:"name"`
+	// Aliases are the other names the player's Steam account played under (see Identities).
+	Aliases           []string `json:"aliases,omitempty"`
+	Squad             string   `json:"squad"`    // normalised squad of the latest mission ("" = played without a squad)
+	SquadRaw          string   `json:"squadRaw"` // squad as captured from the nickname, before aliases
+	Kills             int      `json:"kills"`
+	Deaths            int      `json:"deaths"`
+	TeamKills         int      `json:"teamKills"`
+	VehiclesDestroyed int      `json:"vehiclesDestroyed"`
+	KillAssists       int      `json:"killAssists"`
+	ShotsFired        int      `json:"shotsFired"`
+	Hits              int      `json:"hits"`
+	Treatments        int      `json:"treatments"`
+	Revives           int      `json:"revives"`
+	MedicalPoints     float64  `json:"medicalPoints"` // treatments and revives weighed by stats.Medical
+	Attendance        int      `json:"attendance"`
+	Accuracy          float64  `json:"accuracy"`
+	KD                float64  `json:"kd"` // kills / deaths (kills when there are no deaths)
+	FirstSeen         string   `json:"firstSeen"`
+	LastSeen          string   `json:"lastSeen"`
 	// Custom holds custom column values by column id (null when undefined, e.g. x/0).
 	Custom map[string]*float64 `json:"custom,omitempty"`
 }
@@ -304,6 +306,26 @@ func (r *Result) FindSquad(name string) (Squad, bool) {
 		}
 	}
 	return Squad{}, false
+}
+
+// SetAliases fills the other names of every player.
+func (r *Result) SetAliases(ids *Identities) {
+	for _, list := range [][]Player{r.Players, r.fullPlayers} {
+		for i := range list {
+			list[i].Aliases = ids.Aliases(list[i].Name)
+		}
+	}
+}
+
+// PlayerRows returns a player's rows, ordered by date.
+func (r *Result) PlayerRows(name string) []store.Row {
+	var out []store.Row
+	for _, row := range r.rows {
+		if row.Name == name {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 // FindPlayer looks a player up by exact name, including players hidden by Hide.

@@ -376,6 +376,8 @@
   'mission.tab.feed': 'Lista zabójstw',
   'feed.allPlayers': 'Wszyscy',
   'feed.reset': 'Pokaż wszystkich',
+  'feed.profile': 'Profil',
+  'mission.nowAs': 'teraz {name}',
   'feed.summary': 'zabójstwa {k} · śmierci {d} · asysty {a} · pojazdy {v}',
   'feed.unknown': 'nieznany',
   'feed.suicide': 'samobójstwo',

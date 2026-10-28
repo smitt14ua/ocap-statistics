@@ -376,6 +376,8 @@
   'mission.tab.feed': 'Өлтірулер тізбегі',
   'feed.allPlayers': 'Барлығы',
   'feed.reset': 'Барлығын көрсету',
+  'feed.profile': 'Профиль',
+  'mission.nowAs': 'қазір {name}',
   'feed.summary': 'өлтірулер {k} · өлімдер {d} · көмек {a} · техника {v}',
   'feed.unknown': 'белгісіз',
   'feed.suicide': 'өз-өзін өлтіру',

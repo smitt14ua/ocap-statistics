@@ -376,6 +376,8 @@
   'mission.tab.feed': 'Стужка забойстваў',
   'feed.allPlayers': 'Усе',
   'feed.reset': 'Паказаць усіх',
+  'feed.profile': 'Профіль',
+  'mission.nowAs': 'цяпер {name}',
   'feed.summary': 'забойствы {k} · смерці {d} · дапамога {a} · тэхніка {v}',
   'feed.unknown': 'невядома',
   'feed.suicide': 'самагубства',

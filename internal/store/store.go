@@ -646,14 +646,9 @@ type Row struct {
 	stats.PlayerRow
 }
 
-// Rows returns player rows of missions matching the filter, ordered by date. When name is
-// non-empty only that player's rows are returned.
-func (s *Store) Rows(ctx context.Context, f Filter, name string) ([]Row, error) {
+// Rows returns player rows of missions matching the filter, ordered by date.
+func (s *Store) Rows(ctx context.Context, f Filter) ([]Row, error) {
 	where, args := f.where("m")
-	if name != "" {
-		where += " AND p.name = ?"
-		args = append(args, name)
-	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+rowCols+`
 		FROM mission_players p JOIN missions m ON m.id = p.mission_id
 		WHERE `+where+` ORDER BY m.date, m.id`, args...)
@@ -694,8 +689,8 @@ func (s *Store) MissionRows(ctx context.Context, id int64) ([]Row, error) {
 
 // KillQuery narrows Kills.
 type KillQuery struct {
-	MissionID int64  // 0 = any mission matching the filter
-	Player    string // killer or victim
+	MissionID int64    // 0 = any mission matching the filter
+	Players   []string // killer or victim is one of these names; empty = anyone
 }
 
 type Kill struct {
@@ -747,9 +742,14 @@ func (s *Store) Kills(ctx context.Context, f Filter, q KillQuery) ([]Kill, error
 		where = "m.id = ? AND m.status = 'done'"
 		args = []any{q.MissionID}
 	}
-	if q.Player != "" {
-		where += " AND (k.killer = ? OR k.victim = ?)"
-		args = append(args, q.Player, q.Player)
+	if len(q.Players) > 0 {
+		in := strings.Repeat(",?", len(q.Players))[1:]
+		where += " AND (k.killer IN (" + in + ") OR k.victim IN (" + in + "))"
+		for range 2 {
+			for _, p := range q.Players {
+				args = append(args, p)
+			}
+		}
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+killCols+`
 		FROM kills k JOIN missions m ON m.id = k.mission_id

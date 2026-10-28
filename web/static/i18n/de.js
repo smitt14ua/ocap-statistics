@@ -376,6 +376,8 @@
   'mission.tab.feed': 'Killfeed',
   'feed.allPlayers': 'Alle',
   'feed.reset': 'Alle anzeigen',
+  'feed.profile': 'Profil',
+  'mission.nowAs': 'jetzt {name}',
   'feed.summary': 'Kills {k} · Tode {d} · Assists {a} · Fahrzeuge {v}',
   'feed.unknown': 'unbekannt',
   'feed.suicide': 'Selbstmord',
