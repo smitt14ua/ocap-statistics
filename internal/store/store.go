@@ -128,7 +128,8 @@ CREATE TABLE IF NOT EXISTS player_sessions (
 	expires_at INTEGER NOT NULL,
 	issuer     TEXT    NOT NULL DEFAULT '',
 	subject    TEXT    NOT NULL DEFAULT '',
-	id_token   TEXT    NOT NULL DEFAULT ''
+	id_token   TEXT    NOT NULL DEFAULT '',
+	sid        TEXT    NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS oidc_accounts (
@@ -202,6 +203,7 @@ func migrate(db *sql.DB) error {
 		{"player_sessions", "issuer", "TEXT NOT NULL DEFAULT ''"},
 		{"player_sessions", "subject", "TEXT NOT NULL DEFAULT ''"},
 		{"player_sessions", "id_token", "TEXT NOT NULL DEFAULT ''"},
+		{"player_sessions", "sid", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		var n int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&n); err != nil {

@@ -24,6 +24,10 @@ import (
 const (
 	maxPictureURL = 2048
 	maxNameRunes  = 64
+	// logoutTokenMaxAge is how old (by iat) a back-channel logout token may be; the provider
+	// sends it right after the logout. logoutTokenSkew allows its clock to run ahead.
+	logoutTokenMaxAge = 10 * time.Minute
+	logoutTokenSkew   = 5 * time.Minute
 )
 
 // steamID64Pattern matches a 64-bit Steam id.
@@ -38,6 +42,9 @@ type OIDC struct {
 
 	mu sync.Mutex
 	p  *oidcProvider // discovered on first use, so a provider that is down does not stop the service
+
+	jtiMu sync.Mutex
+	jtis  map[string]time.Time // ids of processed logout tokens, until they expire
 }
 
 type oidcProvider struct {
@@ -136,6 +143,9 @@ func (o *OIDC) AuthURL(ctx context.Context, l OIDCLogin, redirectURI string) (st
 // profile data that may change at the provider and are refreshed at every sign-in.
 type OIDCProfile struct {
 	Issuer, Subject string
+	// SessionID is the provider's session ("sid" of the ID token), if it names one; a
+	// back-channel logout may refer to it.
+	SessionID string
 	// SteamID is empty when the user has not linked a Steam account at the provider.
 	SteamID string
 	Name    string
@@ -197,6 +207,8 @@ func (o *OIDC) Exchange(ctx context.Context, l OIDCLogin, redirectURI, code stri
 	if err := idt.Claims(&claims); err != nil {
 		return nil, fmt.Errorf("oidc: id_token claims: %w", err)
 	}
+	var sid string
+	_ = json.Unmarshal(claims["sid"], &sid)
 	if p.provider.UserInfoEndpoint() != "" {
 		ui, err := p.provider.UserInfo(ctx, oauth2.StaticTokenSource(tok))
 		if err != nil {
@@ -215,7 +227,7 @@ func (o *OIDC) Exchange(ctx context.Context, l OIDCLogin, redirectURI, code stri
 	}
 
 	prof := &OIDCProfile{
-		Issuer: idt.Issuer, Subject: idt.Subject, IDToken: rawID,
+		Issuer: idt.Issuer, Subject: idt.Subject, SessionID: sid, IDToken: rawID,
 		SteamID: steamIDClaim(claims[o.cfg.SteamIDClaim]),
 		Picture: pictureClaim(claims[o.cfg.PictureClaim]),
 	}
@@ -257,6 +269,59 @@ func (o *OIDC) LogoutURL(ctx context.Context, idToken, postLogout string) (strin
 	q.Set("post_logout_redirect_uri", postLogout)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+// OIDCLogout is a verified back-channel logout: the provider ended the user's session(s).
+// Subject, SessionID or both are set.
+type OIDCLogout struct {
+	Issuer, Subject, SessionID string
+}
+
+// VerifyLogout checks a back-channel logout token (OpenID Connect Back-Channel Logout 1.0).
+// go-oidc verifies the signature against the provider's JWKS, iss, aud, exp, the logout event,
+// sub or sid, and that there is no nonce (so an ID token cannot pass for one); this adds a
+// fresh iat and rejects a token id (jti) seen before.
+func (o *OIDC) VerifyLogout(ctx context.Context, raw string) (*OIDCLogout, error) {
+	p, err := o.provider(ctx)
+	if err != nil {
+		return nil, err
+	}
+	lt, err := p.verifier.VerifyLogout(o.ctx(ctx), raw)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	if lt.IssuedAt.IsZero() || now.Sub(lt.IssuedAt) > logoutTokenMaxAge || lt.IssuedAt.Sub(now) > logoutTokenSkew {
+		return nil, errors.New("oidc: logout token iat is missing or not recent")
+	}
+	if err := o.useJTI(lt.TokenID, lt.Expiry, now); err != nil {
+		return nil, err
+	}
+	return &OIDCLogout{Issuer: lt.Issuer, Subject: lt.Subject, SessionID: lt.SessionID}, nil
+}
+
+// useJTI remembers a logout token id until the token expires (at least as long as its iat
+// is accepted) and rejects one already processed.
+func (o *OIDC) useJTI(jti string, expiry, now time.Time) error {
+	o.jtiMu.Lock()
+	defer o.jtiMu.Unlock()
+	if o.jtis == nil {
+		o.jtis = map[string]time.Time{}
+	}
+	for id, until := range o.jtis {
+		if now.After(until) {
+			delete(o.jtis, id)
+		}
+	}
+	if _, seen := o.jtis[jti]; seen {
+		return errors.New("oidc: logout token already processed (jti)")
+	}
+	until := now.Add(logoutTokenMaxAge + logoutTokenSkew)
+	if expiry.After(until) {
+		until = expiry
+	}
+	o.jtis[jti] = until
+	return nil
 }
 
 // tokenError describes a failed token request without the response body.

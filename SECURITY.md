@@ -28,7 +28,10 @@ impact you expect. You should get an answer within a week.
 - OpenID Connect sign-in uses the Authorization Code flow with PKCE (`S256`), a state cookie
   and a nonce; the ID token is verified by go-oidc (signature against the provider's JWKS,
   issuer, audience, expiry), the userinfo must name the same `sub`, and users are bound by
-  issuer and `sub` only. Codes, tokens and profile data are never logged; the ID token is kept
+  issuer and `sub` only. The back-channel logout endpoint (called by the provider's server,
+  so without CSRF check or authentication) accepts only a logout token signed with the
+  provider's keys, for this client, with the logout event, a recent `iat`, no `nonce` and an
+  unused `jti`. Codes, tokens and profile data are never logged; the ID token is kept
   server-side only as `id_token_hint` for the logout. Player sessions are stored hashed, sent as `HttpOnly`,
   `SameSite=Lax` cookies, grant no admin access, and only reveal the player's own Steam id.
 - Failed logins are rate limited per client address and per user name; password hashing is

@@ -130,7 +130,8 @@ Players can sign in to see a card with their own statistics for the selected per
 - `steam`: "Sign in with Steam" (OpenID 2.0, no API key or registration needed).
 - `oidc`: an OpenID Connect provider of your own (Keycloak, Authentik, Zitadel, …) that knows the user's Steam account and returns its SteamID64 in a claim (`OIDC_STEAM_ID_CLAIM`). The service uses the Authorization Code flow with PKCE (`S256`) and authenticates with `client_secret_basic` when `OIDC_CLIENT_SECRET` is set; without it, it is a public client. Register at the provider:
   - redirect URI `https://<your site>/api/auth/oidc/callback` (for local development e.g. `http://localhost:8765/api/auth/oidc/callback`);
-  - post-logout redirect URI `https://<your site>/` (signing out also signs out at the provider when it has an `end_session_endpoint`).
+  - post-logout redirect URI `https://<your site>/` (signing out also signs out at the provider when it has an `end_session_endpoint`);
+  - back-channel logout URI `https://<your site>/api/auth/oidc/backchannel-logout` (optional): when the user signs out at the provider, it posts a signed logout token there and the site ends all sessions of that user (by `sub`, or by `sid` when the token names only the session).
 
   Users are identified by issuer and `sub`; the Steam id, nickname and avatar are read from the userinfo endpoint at every sign-in. A user without a linked Steam account is signed in and told to link it at the provider. When the provider shares neither a Steam id nor a name — usually because the client may not use the requested scopes, which providers drop silently — the sign-in fails and the log names the scopes the provider granted.
 

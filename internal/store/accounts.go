@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
@@ -17,6 +18,8 @@ type PlayerSession struct {
 	Name, Picture string
 	// IDToken is the provider's ID token, for the logout.
 	IDToken string
+	// SessionID is the provider's session ("sid"), for its back-channel logout.
+	SessionID string
 }
 
 // CreatePlayerSession stores a session of the Steam sign-in by the hash of its token.
@@ -35,7 +38,29 @@ func (s *Store) SaveOIDCAccount(ctx context.Context, tokenHash string, a PlayerS
 		a.Issuer, a.Subject, a.SteamID, a.Name, a.Picture, time.Now().Unix()); err != nil {
 		return err
 	}
-	return s.createPlayerSession(ctx, tokenHash, PlayerSession{Issuer: a.Issuer, Subject: a.Subject, IDToken: a.IDToken}, expires)
+	return s.createPlayerSession(ctx, tokenHash, PlayerSession{Issuer: a.Issuer, Subject: a.Subject, IDToken: a.IDToken, SessionID: a.SessionID}, expires)
+}
+
+// EndOIDCSessions deletes, with their ID tokens, every session of an OpenID Connect user (by
+// issuer and subject), or without a subject the sessions of the provider's session sid. It
+// returns how many sessions ended.
+func (s *Store) EndOIDCSessions(ctx context.Context, issuer, subject, sid string) (int64, error) {
+	var res sql.Result
+	var err error
+	switch {
+	case issuer == "":
+		return 0, nil
+	case subject != "":
+		res, err = s.db.ExecContext(ctx, `DELETE FROM player_sessions WHERE issuer = ? AND subject = ?`, issuer, subject)
+	case sid != "":
+		res, err = s.db.ExecContext(ctx, `DELETE FROM player_sessions WHERE issuer = ? AND sid = ?`, issuer, sid)
+	default:
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (s *Store) createPlayerSession(ctx context.Context, tokenHash string, a PlayerSession, expires time.Time) error {
@@ -43,8 +68,8 @@ func (s *Store) createPlayerSession(ctx context.Context, tokenHash string, a Pla
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM player_sessions WHERE expires_at < ?`, time.Now().Unix()); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO player_sessions (token_hash, steam_id, expires_at, issuer, subject, id_token)
-		VALUES (?, ?, ?, ?, ?, ?)`, tokenHash, a.SteamID, expires.Unix(), a.Issuer, a.Subject, a.IDToken)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO player_sessions (token_hash, steam_id, expires_at, issuer, subject, id_token, sid)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, tokenHash, a.SteamID, expires.Unix(), a.Issuer, a.Subject, a.IDToken, a.SessionID)
 	return err
 }
 

@@ -36,6 +36,7 @@ func (s *Server) accountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/auth/steam/callback", s.steamCallback)
 	mux.HandleFunc("GET /api/auth/oidc", s.oidcLogin)
 	mux.HandleFunc("GET /api/auth/oidc/callback", s.oidcCallback)
+	mux.HandleFunc("POST /api/auth/oidc/backchannel-logout", s.oidcBackchannelLogout)
 	mux.HandleFunc("GET /api/auth/me", s.account)
 	mux.HandleFunc("POST /api/auth/logout", s.playerLogout)
 }
@@ -328,7 +329,7 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = s.store.SaveOIDCAccount(r.Context(), hash, store.PlayerSession{
 			Issuer: prof.Issuer, Subject: prof.Subject, SteamID: prof.SteamID,
-			Name: prof.Name, Picture: prof.Picture, IDToken: prof.IDToken,
+			Name: prof.Name, Picture: prof.Picture, IDToken: prof.IDToken, SessionID: prof.SessionID,
 		}, time.Now().Add(s.cfg.Steam.SessionTTL.D()))
 	}
 	if err != nil {
@@ -348,6 +349,43 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		s.log.Info("player signed in through OpenID Connect")
 	}
 	http.Redirect(w, r, back, http.StatusSeeOther)
+}
+
+// maxLogoutRequest limits the body of a back-channel logout request (one signed JWT).
+const maxLogoutRequest = 64 << 10
+
+// oidcBackchannelLogout ends the sessions of a user the provider signed out (OpenID Connect
+// Back-Channel Logout 1.0): with sub every session of that user, with only sid the sessions
+// of that provider session. The provider's server calls it, not a browser, so there is no
+// CSRF check or authentication; the signed logout token is the authorisation.
+func (s *Server) oidcBackchannelLogout(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if s.cfg.Login != config.LoginOIDC {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	invalid := func(desc string) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request", "error_description": desc})
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxLogoutRequest)
+	raw := r.PostFormValue("logout_token")
+	if raw == "" {
+		invalid("logout_token is required (application/x-www-form-urlencoded)")
+		return
+	}
+	lo, err := s.oidc.VerifyLogout(r.Context(), raw)
+	if err != nil {
+		s.log.Warn("oidc back-channel logout rejected", "ip", s.clientIP(r), "err", err)
+		invalid("invalid logout token")
+		return
+	}
+	n, err := s.store.EndOIDCSessions(r.Context(), lo.Issuer, lo.Subject, lo.SessionID)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.log.Info("oidc back-channel logout", "sessions", n, "bySid", lo.Subject == "")
+	w.WriteHeader(http.StatusOK)
 }
 
 // grantedScope is the scope the token endpoint reported, for logs.

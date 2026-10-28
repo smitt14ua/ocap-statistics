@@ -47,6 +47,7 @@ type fakeOIDC struct {
 	// secrets lists every code and token issued, which must never appear in the site's log.
 	secrets     []string
 	lastIDToken string
+	lastSID     string // "sid" of the last ID token: the provider's session
 }
 
 type fakeGrant struct{ sub, nonce, challenge, redirect string }
@@ -157,13 +158,14 @@ func (f *fakeOIDC) token(w http.ResponseWriter, r *http.Request) {
 	access := randomString()
 	f.access[access] = g.sub
 	now := time.Now()
+	sid := "sid-" + randomString()
 	idToken := f.sign(map[string]any{
-		"iss": f.URL, "sub": g.sub, "aud": testClientID, "nonce": nonce,
+		"iss": f.URL, "sub": g.sub, "aud": testClientID, "nonce": nonce, "sid": sid,
 		"iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(),
 		// Stale profile: the site must prefer the userinfo.
 		"picture": "https://cdn.example.com/stale.png",
 	})
-	f.lastIDToken = idToken
+	f.lastIDToken, f.lastSID = idToken, sid
 	f.secrets = append(f.secrets, code, access, idToken)
 	resp := map[string]any{"access_token": access, "token_type": "Bearer", "expires_in": 300, "id_token": idToken}
 	if f.scope != "" {
@@ -172,12 +174,15 @@ func (f *fakeOIDC) token(w http.ResponseWriter, r *http.Request) {
 	writeTestJSON(w, resp)
 }
 
-func (f *fakeOIDC) sign(claims map[string]any) string {
+func (f *fakeOIDC) sign(claims map[string]any) string { return f.signWith(f.key, claims) }
+
+// signWith signs with key under the provider's key id, as a forger would.
+func (f *fakeOIDC) signWith(key *rsa.PrivateKey, claims map[string]any) string {
 	header, _ := json.Marshal(map[string]string{"alg": "RS256", "typ": "JWT", "kid": "k1"})
 	payload, _ := json.Marshal(claims)
 	input := b64(header) + "." + b64(payload)
 	sum := sha256.Sum256([]byte(input))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, f.key, crypto.SHA256, sum[:])
+	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, sum[:])
 	if err != nil {
 		f.t.Fatal(err)
 	}
