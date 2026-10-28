@@ -426,6 +426,17 @@ func TestPlayersMergedBySteam(t *testing.T) {
 		t.Errorf("victims: %+v", profile.Victims)
 	}
 
+	// The monthly trend covers all time, whatever the period.
+	var trend struct {
+		Missions []missionRow
+		Trend    []report.TrendPoint
+	}
+	get(t, h, "/api/v1/players/Smithy?from=2026-10-02", &trend)
+	if len(trend.Missions) != 1 || len(trend.Trend) != 2 ||
+		trend.Trend[0].Month != "2026-09" || trend.Trend[0].Missions != 1 || trend.Trend[1].Missions != 2 {
+		t.Errorf("trend: %d missions, %+v", len(trend.Missions), trend.Trend)
+	}
+
 	// A mission shows the name played under in it, and the current one for the profile.
 	var m struct {
 		Players []struct{ Name, Player string }

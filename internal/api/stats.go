@@ -516,6 +516,15 @@ func (s *Server) player(r *http.Request) (response, error) {
 		squadCount.add(res.SquadName(row.Squad))
 	}
 
+	// The trend covers all time (with the same tag and minimum duration), not only the period.
+	allTime := f
+	allTime.From, allTime.To = "0000-01-01", "9999-12-31"
+	ball, err := s.report(ctx, allTime)
+	if err != nil {
+		return response{}, err
+	}
+	trend := report.Trend(ball.res.PlayerRows(name), med)
+
 	weapons, victims, killers := counter{}, counter{}, counter{}
 	var longest *store.Kill
 	for i, k := range kills {
@@ -544,6 +553,7 @@ func (s *Server) player(r *http.Request) (response, error) {
 		"killedBy":    killers.top(10),
 		"longestKill": longest,
 		"missions":    missions,
+		"trend":       nonNil(trend),
 	})
 }
 

@@ -257,6 +257,37 @@
                       "items": {
                         "$ref": "#/components/schemas/PlayerMission"
                       }
+                    },
+                    "trend": {
+                      "type": "array",
+                      "description": "The player's statistics per calendar month over all time (ignoring from and to), from the first month played to the last; months without missions have zeros",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "month": {
+                            "type": "string",
+                            "description": "YYYY-MM"
+                          },
+                          "missions": {
+                            "type": "integer"
+                          },
+                          "kills": {
+                            "type": "integer"
+                          },
+                          "deaths": {
+                            "type": "integer"
+                          },
+                          "killAssists": {
+                            "type": "integer"
+                          },
+                          "medicalPoints": {
+                            "type": "number"
+                          },
+                          "kd": {
+                            "type": "number"
+                          }
+                        }
+                      }
                     }
                   }
                 }

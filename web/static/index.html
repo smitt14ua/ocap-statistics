@@ -142,6 +142,25 @@
     .feed-filter .summary { color: var(--muted); font-size: 13px; }
     .feed-filter button[hidden] { display: none; }
     .now-as { display: block; color: var(--muted); font-size: 12px; }
+    .trend-box { margin: 16px 0; }
+    .trend-box h4 { font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px; }
+    .trends { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    .trend { margin: 0; background: var(--bg-input); border-radius: 10px; padding: 10px 12px; }
+    .trend figcaption { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .trend-plot { position: relative; }
+    .trend svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .trend .grid { stroke: var(--border); stroke-width: 1; }
+    .trend .tick { fill: var(--muted); font-size: 10px; }
+    .trend .bar { fill: var(--accent); }
+    .trend .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .trend .dot { fill: var(--accent); stroke: var(--bg-input); stroke-width: 2; }
+    .trend .cursor { stroke: var(--border-hover); stroke-width: 1; }
+    .trend .hit { fill: transparent; }
+    .trend-tip { position: absolute; top: -6px; transform: translate(-50%, -100%); background: var(--bg-active); border: 1px solid var(--border-hover);
+      border-radius: 6px; padding: 4px 8px; font-size: 12px; color: var(--text-strong); white-space: nowrap; pointer-events: none; z-index: 1; }
+    .trend-tip[hidden] { display: none; }
+    .trend-box details { margin-top: 10px; }
+    .trend-box summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     .matrix { width: auto; font-variant-numeric: tabular-nums; }
     .matrix th, .matrix td { text-align: center; border: 1px solid var(--border); padding: 6px 9px; }
     .matrix th[scope=row] { text-align: left; }

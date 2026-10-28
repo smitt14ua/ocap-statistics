@@ -45,6 +45,94 @@ const fmtClock = (sec) => {
 const SIDE_COLORS = { WEST: '#3b82f6', EAST: '#ef4444', GUER: '#22c55e', CIV: '#a855f7' };
 const sideDot = (side) => el('span', { class: 'swatch', style: `background:${SIDE_COLORS[side] || '#888'}`, 'aria-hidden': 'true' });
 
+// svg builds an SVG element as el() builds HTML ones, but flattens nested child arrays fully.
+const svg = (tag, attrs = {}, ...children) => {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs)) if (v !== undefined && v !== null && v !== false) node.setAttribute(k, v);
+  for (const c of children.flat(Infinity)) {
+    if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return node;
+};
+
+// fmtMonth shows a YYYY-MM month in the page language: "Oct 26", or "October 2026" when long.
+const fmtMonth = (m, long = false) => new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)) - 1, 1)
+  .toLocaleDateString(window.i18n.lang, long ? { month: 'long', year: 'numeric' } : { month: 'short', year: '2-digit' });
+const fmtTick = (v) => Number.isInteger(v) ? String(v) : fmt(v, 1);
+
+// niceMax rounds the top of an axis up to 1, 2 or 5 × a power of ten.
+const niceMax = (v) => {
+  if (v <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  return [1, 2, 5, 10].map(m => m * p).find(m => m >= v);
+};
+
+// trendChart draws one monthly series as columns or a line, with a tooltip per month on
+// hover. value returns null for a month without data, which leaves a gap in a line.
+function trendChart(points, { title, value, kind, format }) {
+  const W = 320, H = 132, L = 34, R = 8, T = 10, B = 22;
+  const vals = points.map(value);
+  const top = niceMax(Math.max(0, ...vals.filter(v => v !== null)));
+  const band = (W - L - R) / points.length;
+  const x = (i) => L + band * (i + 0.5);
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const grid = [0, top / 2, top].map(v => [
+    svg('line', { class: 'grid', x1: L, x2: W - R, y1: y(v), y2: y(v) }),
+    svg('text', { class: 'tick', x: L - 6, y: y(v) + 3.5, 'text-anchor': 'end' }, fmtTick(v))]);
+  // Month labels: about six, always the last one, never two crowded together.
+  const step = Math.ceil(points.length / 6);
+  const labelled = points.map((_, i) => i % step === 0);
+  const last = points.length - 1;
+  if (!labelled[last]) {
+    if (last % step < step * 0.6) labelled[last - last % step] = false;
+    labelled[last] = true;
+  }
+  const months = points.map((p, i) => labelled[i] && svg('text', { class: 'tick', x: x(i), y: H - 6, 'text-anchor': 'middle' }, fmtMonth(p.month)));
+
+  let marks;
+  if (kind === 'bar') {
+    const w = Math.min(24, band * 0.6);
+    // Columns grow from the baseline with a 4px rounded top.
+    marks = vals.map((v, i) => {
+      if (!v) return null;
+      const x0 = x(i) - w / 2, x1 = x(i) + w / 2, y0 = y(v), yb = y(0), r = Math.min(4, yb - y0, w / 2);
+      return svg('path', { class: 'bar', d: `M${x0} ${yb}V${y0 + r}Q${x0} ${y0} ${x0 + r} ${y0}H${x1 - r}Q${x1} ${y0} ${x1} ${y0 + r}V${yb}Z` });
+    });
+  } else {
+    let d = '', pen = false;
+    vals.forEach((v, i) => {
+      if (v === null) { pen = false; return; }
+      d += `${pen ? 'L' : 'M'}${x(i)} ${y(v)}`;
+      pen = true;
+    });
+    // Markers on every month while they fit, otherwise only on the latest one.
+    const dots = vals.map((v, i) => v !== null && (points.length <= 24 || i === last) && svg('circle', { class: 'dot', cx: x(i), cy: y(v), r: 4 }));
+    marks = [svg('path', { class: 'line', d }), dots];
+  }
+
+  const tip = el('div', { class: 'trend-tip', hidden: true });
+  const cursor = svg('line', { class: 'cursor', y1: T, y2: H - B, visibility: 'hidden' });
+  const show = (i) => {
+    const p = points[i], v = vals[i];
+    tip.textContent = [`${fmtMonth(p.month, true)}: ${v === null ? '—' : format(v)}`, kind === 'bar' ? null : t('trend.missionsN', { n: p.missions })].filter(Boolean).join(' · ');
+    tip.style.left = `${x(i) / W * 100}%`;
+    tip.hidden = false;
+    cursor.setAttribute('x1', x(i));
+    cursor.setAttribute('x2', x(i));
+    cursor.setAttribute('visibility', 'visible');
+  };
+  const hide = () => { tip.hidden = true; cursor.setAttribute('visibility', 'hidden'); };
+  // Each month's whole column is the hover target, wider than its mark.
+  const hits = points.map((_, i) => {
+    const r = svg('rect', { class: 'hit', x: L + band * i, y: T, width: band, height: H - T - B });
+    r.addEventListener('pointerenter', () => show(i));
+    return r;
+  });
+  const chart = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title }, grid, months, cursor, marks, hits);
+  chart.addEventListener('pointerleave', hide);
+  return el('figure', { class: 'trend' }, el('figcaption', {}, title), el('div', { class: 'trend-plot' }, chart, tip));
+}
+
 // A cell sorts by its data-sort value when it has one, otherwise by its text; empty cells and
 // dashes have no value and always go last.
 const sortKey = (td) => {
@@ -821,6 +909,7 @@ class StatsApp {
           this.list('list.victims', d.victims, (n) => this.openPlayer(n)),
           this.list('list.killedBy', d.killedBy, (n) => this.openPlayer(n)),
           this.list('list.squads', d.squads, (n) => this.openSquad(n))),
+        this.trend(d.trend),
         this.dataTable(['col.date', 'col.mission', 'col.map', 'col.squad', 'col.side', 'col.k', 'col.d', 'col.teamKills', 'col.vehicles', 'col.assists', 'col.medical'],
           d.missions.map(m => el('tr', {},
             el('td', {}, m.date), el('td', {}, el('button', { type: 'button', class: 'link', onclick: () => this.openMission(m.missionId, m.name) }, m.name)), el('td', {}, m.world),
@@ -829,6 +918,25 @@ class StatsApp {
             el('td', {}, this.medical(m))))),
       ];
     });
+  }
+
+  // trend shows a player's months over all time: missions, kills per mission and K/D, each
+  // its own chart (one scale per chart), with the numbers in a table below.
+  trend(points) {
+    if (!points || points.length < 2) return null;
+    const perMission = (p) => p.missions ? p.kills / p.missions : null;
+    return el('section', { class: 'trend-box' },
+      el('h4', {}, t('trend.title')),
+      el('div', { class: 'trends' },
+        trendChart(points, { title: t('trend.missions'), kind: 'bar', value: p => p.missions, format: String }),
+        trendChart(points, { title: t('trend.kpm'), kind: 'line', value: perMission, format: v => fmt(v, 2) }),
+        trendChart(points, { title: t('trend.kd'), kind: 'line', value: p => p.missions ? p.kd : null, format: v => fmt(v, 2) })),
+      el('details', {}, el('summary', {}, t('trend.table')),
+        this.dataTable(['col.month', 'tile.missions', 'col.kills', 'col.deaths', 'trend.kpm', 'col.kd', 'tile.assists', 'tile.medical'],
+          [...points].reverse().map(p => el('tr', {},
+            el('td', { 'data-sort': p.month }, fmtMonth(p.month, true)), el('td', {}, p.missions), el('td', {}, p.kills), el('td', {}, p.deaths),
+            el('td', {}, p.missions ? fmt(perMission(p)) : '—'), el('td', {}, p.missions ? fmt(p.kd) : '—'),
+            el('td', {}, p.killAssists), el('td', {}, fmtPoints(p.medicalPoints)))))));
   }
 
   openSquad(name) {

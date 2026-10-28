@@ -53,6 +53,7 @@ internal/store/accounts.go    player sessions (Steam sign-in), names of a Steam 
 internal/report/report.go     aggregation over a period: Player, Squad, Totals, achievements, rotation, sorting
 internal/report/identity.go   Identities: names of one Steam account merged into one player, Renamer for kills/assists
 internal/report/matrix.go     SquadMatrix: kills between squads (store.Store.SquadKills), Rivals of a squad
+internal/report/trend.go      Trend: a player's statistics per month (profile charts)
 internal/report/columns.go    custom columns: Column, Variables, NormalizeColumns, ApplyColumns, Preview
 internal/formula/formula.go   formula language: lexer, parser, evaluator (no reflection, no eval)
 internal/settings/settings.go runtime settings: config defaults + admin overrides stored in meta table
@@ -125,7 +126,7 @@ docs/decisions.md             why things are built the way they are (SQLite, dig
 - Saved admin settings override config/env until reset; tests that change config must account for that.
 - The default sort (`settings.Sort`) may point to a custom column (`custom.<id>`); `SortOrder.normalize` falls back to kills when that column is deleted, and `app.js` `defaultSort` does the same on the client.
 - `sync.since` / the admin "process recordings from" date also removes older recordings from the database (it mirrors OCAP filtered by the settings).
-- In the web scripts, `el()` flattens its children one level only: build nested lists with `flatMap`, otherwise an inner array is rendered as "[object HTMLSpanElement]". `replaceChildren` skips nothing: a `null` passed to it shows as the text "null".
+- In the web scripts, `el()` flattens its children one level only: build nested lists with `flatMap`, otherwise an inner array is rendered as "[object HTMLSpanElement]" (inside an `<svg>` such text is invisible, so `svg()` flattens fully). `replaceChildren` skips nothing: a `null` passed to it shows as the text "null".
 - `Server.report` hides players and squads below the "minimum missions" setting from `Players`/`Squads`; look a player or squad up with `FindPlayer`/`FindSquad`, which also see hidden ones.
 - OCAP writes recordings received over its WebSocket ingest with mode 0600 (`os.CreateTemp`), so a mounted data dir may hold files this service cannot read; `ocap.Client.OpenMission` downloads over HTTP on any open error, not only a missing file.
 - A mission OCAP receives over its WebSocket ingest is listed from its start with `conversionStatus` `streaming` but gets its `.json.gz` only when it ends; the syncer skips such operations (`ocap.Operation.Live`), and `store.Store.UpsertOperations` retries failed and missing recordings whose OCAP status changed.
