@@ -791,19 +791,15 @@ class StatsApp {
     return img;
   }
 
+  // Signs out of this site only; a session at the OpenID Connect provider stays.
   async logout() {
-    let redirect = '';
     try {
       const res = await fetch('api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'ocap-stats' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      redirect = (await res.json()).redirect || '';
     } catch (e) {
       this.toast(t('n.error'), e.message, true);
       return;
     }
-    // After the OpenID Connect sign-in the provider ends its session too and sends the
-    // browser back here.
-    if (/^https?:\/\//.test(redirect)) { location.assign(redirect); return; }
     this.me = null;
     this.mine = new Set();
     this.renderAccount();

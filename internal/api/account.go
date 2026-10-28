@@ -210,35 +210,22 @@ func (s *Server) account(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// playerLogout ends the session; after the OpenID Connect sign-in the answer names the
-// provider's logout page for the browser to go to.
+// playerLogout ends the session on this site only. After the OpenID Connect sign-in the
+// provider's session stays: the user signed out here, not there.
 func (s *Server) playerLogout(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Header.Get(csrfHeader) == "" {
 		writeError(w, http.StatusForbidden, "missing "+csrfHeader+" header")
 		return
 	}
-	resp := map[string]string{"status": "signed out"}
 	if token := cookieValue(r, playerCookie); token != "" {
-		a, ok, err := s.playerSession(r)
-		if err == nil {
-			err = s.store.DeletePlayerSession(r.Context(), auth.HashToken(token))
-		}
-		if err != nil {
+		if err := s.store.DeletePlayerSession(r.Context(), auth.HashToken(token)); err != nil {
 			s.fail(w, r, err)
 			return
 		}
-		if ok && a.Issuer != "" {
-			u, err := s.oidc.LogoutURL(r.Context(), a.IDToken, s.siteURL(r)+"/")
-			if err != nil {
-				s.log.Warn("oidc logout: provider unavailable", "err", err)
-			} else if u != "" {
-				resp["redirect"] = u
-			}
-		}
 	}
 	s.setCookie(w, r, playerCookie, "", 0, http.SameSiteLaxMode)
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "signed out"})
 }
 
 // --- OpenID Connect ---------------------------------------------------------------------
@@ -329,7 +316,7 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = s.store.SaveOIDCAccount(r.Context(), hash, store.PlayerSession{
 			Issuer: prof.Issuer, Subject: prof.Subject, SteamID: prof.SteamID,
-			Name: prof.Name, Picture: prof.Picture, IDToken: prof.IDToken, SessionID: prof.SessionID,
+			Name: prof.Name, Picture: prof.Picture, SessionID: prof.SessionID,
 		}, time.Now().Add(s.cfg.Steam.SessionTTL.D()))
 	}
 	if err != nil {

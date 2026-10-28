@@ -31,8 +31,8 @@ impact you expect. You should get an answer within a week.
   issuer and `sub` only. The back-channel logout endpoint (called by the provider's server,
   so without CSRF check or authentication) accepts only a logout token signed with the
   provider's keys, for this client, with the logout event, a recent `iat`, no `nonce` and an
-  unused `jti`. Codes, tokens and profile data are never logged; the ID token is kept
-  server-side only as `id_token_hint` for the logout. Player sessions are stored hashed, sent as `HttpOnly`,
+  unused `jti`. Codes, tokens and profile data are never logged, and tokens are not stored;
+  signing out ends the session on the site only. Player sessions are stored hashed, sent as `HttpOnly`,
   `SameSite=Lax` cookies, grant no admin access, and only reveal the player's own Steam id.
 - Failed logins are rate limited per client address and per user name; password hashing is
   bounded so it cannot exhaust the CPU.

@@ -16,8 +16,6 @@ type PlayerSession struct {
 	Issuer, Subject string
 	// Name and Picture are the profile at that provider at the last sign-in.
 	Name, Picture string
-	// IDToken is the provider's ID token, for the logout.
-	IDToken string
 	// SessionID is the provider's session ("sid"), for its back-channel logout.
 	SessionID string
 }
@@ -38,10 +36,10 @@ func (s *Store) SaveOIDCAccount(ctx context.Context, tokenHash string, a PlayerS
 		a.Issuer, a.Subject, a.SteamID, a.Name, a.Picture, time.Now().Unix()); err != nil {
 		return err
 	}
-	return s.createPlayerSession(ctx, tokenHash, PlayerSession{Issuer: a.Issuer, Subject: a.Subject, IDToken: a.IDToken, SessionID: a.SessionID}, expires)
+	return s.createPlayerSession(ctx, tokenHash, PlayerSession{Issuer: a.Issuer, Subject: a.Subject, SessionID: a.SessionID}, expires)
 }
 
-// EndOIDCSessions deletes, with their ID tokens, every session of an OpenID Connect user (by
+// EndOIDCSessions deletes every session of an OpenID Connect user (by
 // issuer and subject), or without a subject the sessions of the provider's session sid. It
 // returns how many sessions ended.
 func (s *Store) EndOIDCSessions(ctx context.Context, issuer, subject, sid string) (int64, error) {
@@ -68,8 +66,8 @@ func (s *Store) createPlayerSession(ctx context.Context, tokenHash string, a Pla
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM player_sessions WHERE expires_at < ?`, time.Now().Unix()); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO player_sessions (token_hash, steam_id, expires_at, issuer, subject, id_token, sid)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`, tokenHash, a.SteamID, expires.Unix(), a.Issuer, a.Subject, a.IDToken, a.SessionID)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO player_sessions (token_hash, steam_id, expires_at, issuer, subject, sid)
+		VALUES (?, ?, ?, ?, ?, ?)`, tokenHash, a.SteamID, expires.Unix(), a.Issuer, a.Subject, a.SessionID)
 	return err
 }
 
@@ -78,10 +76,10 @@ func (s *Store) createPlayerSession(ctx context.Context, tokenHash string, a Pla
 func (s *Store) PlayerSession(ctx context.Context, tokenHash string) (PlayerSession, error) {
 	var a PlayerSession
 	err := s.db.QueryRowContext(ctx, `SELECT CASE WHEN p.issuer = '' THEN p.steam_id ELSE COALESCE(a.steam_id, '') END,
-			p.issuer, p.subject, COALESCE(a.name, ''), COALESCE(a.picture, ''), p.id_token
+			p.issuer, p.subject, COALESCE(a.name, ''), COALESCE(a.picture, '')
 		FROM player_sessions p LEFT JOIN oidc_accounts a ON a.issuer = p.issuer AND a.subject = p.subject
 		WHERE p.token_hash = ? AND p.expires_at >= ?`,
-		tokenHash, time.Now().Unix()).Scan(&a.SteamID, &a.Issuer, &a.Subject, &a.Name, &a.Picture, &a.IDToken)
+		tokenHash, time.Now().Unix()).Scan(&a.SteamID, &a.Issuer, &a.Subject, &a.Name, &a.Picture)
 	return a, err
 }
 

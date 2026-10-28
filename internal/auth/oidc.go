@@ -48,10 +48,9 @@ type OIDC struct {
 }
 
 type oidcProvider struct {
-	provider   *oidc.Provider
-	verifier   *oidc.IDTokenVerifier
-	oauth      oauth2.Config // without RedirectURL, which comes from the request
-	endSession string
+	provider *oidc.Provider
+	verifier *oidc.IDTokenVerifier
+	oauth    oauth2.Config // without RedirectURL, which comes from the request
 }
 
 func NewOIDC(cfg config.OIDC) *OIDC {
@@ -72,14 +71,10 @@ func (o *OIDC) provider(ctx context.Context) (*oidcProvider, error) {
 		return nil, fmt.Errorf("oidc discovery: %w", err)
 	}
 	var meta struct {
-		EndSession  string   `json:"end_session_endpoint"`
 		AuthMethods []string `json:"token_endpoint_auth_methods_supported"`
 	}
 	if err := p.Claims(&meta); err != nil {
 		return nil, fmt.Errorf("oidc discovery: %w", err)
-	}
-	if u, err := url.Parse(meta.EndSession); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-		meta.EndSession = ""
 	}
 	ep := p.Endpoint()
 	ep.AuthStyle = authStyle(o.cfg.ClientSecret, meta.AuthMethods)
@@ -90,7 +85,6 @@ func (o *OIDC) provider(ctx context.Context) (*oidcProvider, error) {
 			ClientID: o.cfg.ClientID, ClientSecret: o.cfg.ClientSecret,
 			Endpoint: ep, Scopes: o.cfg.Scopes,
 		},
-		endSession: meta.EndSession,
 	}
 	return o.p, nil
 }
@@ -151,8 +145,6 @@ type OIDCProfile struct {
 	Name    string
 	// Picture is an https URL of the avatar, or empty.
 	Picture string
-	// IDToken is the raw ID token, kept only as id_token_hint for the logout.
-	IDToken string
 	// Granted is the scope the token endpoint reported, empty when it reported none (which
 	// means the requested scope was granted); Dropped are requested scopes it left out.
 	Granted string
@@ -227,7 +219,7 @@ func (o *OIDC) Exchange(ctx context.Context, l OIDCLogin, redirectURI, code stri
 	}
 
 	prof := &OIDCProfile{
-		Issuer: idt.Issuer, Subject: idt.Subject, SessionID: sid, IDToken: rawID,
+		Issuer: idt.Issuer, Subject: idt.Subject, SessionID: sid,
 		SteamID: steamIDClaim(claims[o.cfg.SteamIDClaim]),
 		Picture: pictureClaim(claims[o.cfg.PictureClaim]),
 	}
@@ -248,27 +240,6 @@ func (o *OIDC) Exchange(ctx context.Context, l OIDCLogin, redirectURI, code stri
 		return nil, &ClaimsError{Missing: missing, Granted: prof.Granted, Dropped: prof.Dropped}
 	}
 	return prof, nil
-}
-
-// LogoutURL returns the provider's end_session_endpoint with id_token_hint and
-// post_logout_redirect_uri, or "" when the provider has none.
-func (o *OIDC) LogoutURL(ctx context.Context, idToken, postLogout string) (string, error) {
-	p, err := o.provider(ctx)
-	if err != nil || p.endSession == "" {
-		return "", err
-	}
-	u, err := url.Parse(p.endSession)
-	if err != nil {
-		return "", err
-	}
-	q := u.Query()
-	if idToken != "" {
-		q.Set("id_token_hint", idToken)
-	}
-	q.Set("client_id", o.cfg.ClientID)
-	q.Set("post_logout_redirect_uri", postLogout)
-	u.RawQuery = q.Encode()
-	return u.String(), nil
 }
 
 // OIDCLogout is a verified back-channel logout: the provider ended the user's session(s).

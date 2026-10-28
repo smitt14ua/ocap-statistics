@@ -128,7 +128,6 @@ CREATE TABLE IF NOT EXISTS player_sessions (
 	expires_at INTEGER NOT NULL,
 	issuer     TEXT    NOT NULL DEFAULT '',
 	subject    TEXT    NOT NULL DEFAULT '',
-	id_token   TEXT    NOT NULL DEFAULT '',
 	sid        TEXT    NOT NULL DEFAULT ''
 );
 
@@ -202,15 +201,28 @@ func migrate(db *sql.DB) error {
 		// Sessions of the OpenID Connect sign-in; older ones are Steam sessions.
 		{"player_sessions", "issuer", "TEXT NOT NULL DEFAULT ''"},
 		{"player_sessions", "subject", "TEXT NOT NULL DEFAULT ''"},
-		{"player_sessions", "id_token", "TEXT NOT NULL DEFAULT ''"},
 		{"player_sessions", "sid", "TEXT NOT NULL DEFAULT ''"},
 	} {
-		var n int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&n); err != nil {
+		has, err := hasColumn(db, c.table, c.column)
+		if err != nil {
 			return err
 		}
-		if n == 0 {
+		if !has {
 			if _, err := db.Exec(`ALTER TABLE ` + c.table + ` ADD COLUMN ` + c.column + ` ` + c.def); err != nil {
+				return err
+			}
+		}
+	}
+	for _, c := range []struct{ table, column string }{
+		// ID tokens were kept for the logout at the provider, which the site no longer does.
+		{"player_sessions", "id_token"},
+	} {
+		has, err := hasColumn(db, c.table, c.column)
+		if err != nil {
+			return err
+		}
+		if has {
+			if _, err := db.Exec(`ALTER TABLE ` + c.table + ` DROP COLUMN ` + c.column); err != nil {
 				return err
 			}
 		}
@@ -218,6 +230,12 @@ func migrate(db *sql.DB) error {
 	// Indexes on columns that older databases get above.
 	_, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_mp_steam ON mission_players(steam_id) WHERE steam_id != ''`)
 	return err
+}
+
+func hasColumn(db *sql.DB, table, column string) (bool, error) {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&n)
+	return n > 0, err
 }
 
 // Generation identifies the current state of the statistics.

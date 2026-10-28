@@ -29,7 +29,8 @@ const (
 )
 
 // fakeOIDC is an OpenID Connect provider: discovery, JWKS, token endpoint with PKCE and client
-// authentication, userinfo and an end_session_endpoint. Users are claim sets by subject.
+// authentication, userinfo and an end_session_endpoint (which the site must not send the
+// browser to). Users are claim sets by subject.
 type fakeOIDC struct {
 	*httptest.Server
 	t   *testing.T
@@ -45,9 +46,8 @@ type fakeOIDC struct {
 	// Misbehaviour the site must reject.
 	wrongNonce, wrongUserinfoSub bool
 	// secrets lists every code and token issued, which must never appear in the site's log.
-	secrets     []string
-	lastIDToken string
-	lastSID     string // "sid" of the last ID token: the provider's session
+	secrets []string
+	lastSID string // "sid" of the last ID token: the provider's session
 }
 
 type fakeGrant struct{ sub, nonce, challenge, redirect string }
@@ -165,7 +165,7 @@ func (f *fakeOIDC) token(w http.ResponseWriter, r *http.Request) {
 		// Stale profile: the site must prefer the userinfo.
 		"picture": "https://cdn.example.com/stale.png",
 	})
-	f.lastIDToken, f.lastSID = idToken, sid
+	f.lastSID = sid
 	f.secrets = append(f.secrets, code, access, idToken)
 	resp := map[string]any{"access_token": access, "token_type": "Bearer", "expires_in": 300, "id_token": idToken}
 	if f.scope != "" {
@@ -345,20 +345,23 @@ func TestOIDCLogin(t *testing.T) {
 		}
 	}
 
-	// Logout goes on to the provider's end_session_endpoint with the ID token as hint.
-	idToken := f.lastIDToken
+	// Logout ends the session on the site only: the provider has an end_session_endpoint, but
+	// its session stays, so the answer sends the browser nowhere.
+	stolen := newBrowser(t, h)
+	stolen.cookies[playerCookie] = b2.cookies[playerCookie]
 	rec := b2.do(http.MethodPost, "/api/auth/logout", true)
-	var out struct{ Redirect string }
+	var out map[string]any
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &out) != nil {
 		t.Fatalf("logout: %d %s", rec.Code, rec.Body)
 	}
-	u, _ := url.Parse(out.Redirect)
-	if !strings.HasPrefix(out.Redirect, f.URL+"/logout?") || u.Query().Get("id_token_hint") != idToken ||
-		u.Query().Get("post_logout_redirect_uri") != "http://example.com/" || u.Query().Get("client_id") != testClientID {
-		t.Errorf("logout redirect = %s", out.Redirect)
+	if _, ok := out["redirect"]; ok || out["status"] != "signed out" {
+		t.Errorf("logout = %v, want no redirect", out)
 	}
-	if b2.account().SignedIn {
-		t.Error("signed in after logout")
+	if c := b2.cookies[playerCookie]; c != nil {
+		t.Errorf("player cookie after logout: %+v", c)
+	}
+	if b2.account().SignedIn || stolen.account().SignedIn {
+		t.Error("the session still works after logout")
 	}
 	if !b.account().SignedIn {
 		t.Error("logout ended the session of another browser")
