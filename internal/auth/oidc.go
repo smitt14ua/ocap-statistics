@@ -33,6 +33,9 @@ const (
 // steamID64Pattern matches a 64-bit Steam id.
 var steamID64Pattern = regexp.MustCompile(`^\d{17}$`)
 
+// ValidSteamID reports whether id is a 64-bit Steam id (17 digits).
+func ValidSteamID(id string) bool { return steamID64Pattern.MatchString(id) }
+
 // OIDC implements the sign-in through an OpenID Connect provider: Authorization Code flow
 // with PKCE (S256). Discovery, the token exchange and ID token verification are left to
 // go-oidc and x/oauth2; this type adds the claims the site needs (Steam id, avatar, nickname).

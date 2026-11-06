@@ -34,6 +34,9 @@ impact you expect. You should get an answer within a week.
   unused `jti`. Codes, tokens and profile data are never logged, and tokens are not stored;
   signing out ends the session on the site only. Player sessions are stored hashed, sent as `HttpOnly`,
   `SameSite=Lax` cookies, grant no admin access, and only reveal the player's own Steam id.
+- The private API (players by Steam id) answers only with the configured API or admin token
+  (compared in constant time), sends no CORS headers and `Cache-Control: no-store`, and does
+  not exist when no token is set.
 - Failed logins are rate limited per client address and per user name; password hashing is
   bounded so it cannot exhaust the CPU.
 - State-changing admin requests require a custom header (CSRF protection) and the admin API

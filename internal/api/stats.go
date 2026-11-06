@@ -490,17 +490,29 @@ func (s *Server) player(r *http.Request) (response, error) {
 	if err != nil {
 		return response{}, err
 	}
-	res := b.res
 	// Any name of a player finds it, also one it no longer plays under.
-	name = b.ids.Name(name, "")
-	pl, ok := res.FindPlayer(name)
+	profile, ok, err := s.playerProfile(ctx, f, b, b.ids.Name(name, ""))
+	if err != nil {
+		return response{}, err
+	}
 	if !ok {
 		return response{}, notFound("player")
+	}
+	return jsonResponse(profile)
+}
+
+// playerProfile returns the profile of a player (a name merged by report.Identities) in the
+// report b of filter f; false when the player has no missions in it.
+func (s *Server) playerProfile(ctx context.Context, f store.Filter, b built, name string) (map[string]any, bool, error) {
+	res := b.res
+	pl, ok := res.FindPlayer(name)
+	if !ok {
+		return nil, false, nil
 	}
 	rows := res.PlayerRows(name)
 	all, err := s.store.Kills(ctx, f, store.KillQuery{Players: b.ids.Names(name)})
 	if err != nil {
-		return response{}, err
+		return nil, false, err
 	}
 	// A name several Steam accounts played under matches kills of the others too.
 	kills := all[:0]
@@ -535,7 +547,7 @@ func (s *Server) player(r *http.Request) (response, error) {
 	allTime.From, allTime.To = "0000-01-01", "9999-12-31"
 	ball, err := s.report(ctx, allTime)
 	if err != nil {
-		return response{}, err
+		return nil, false, err
 	}
 	trend := report.Trend(ball.res.PlayerRows(name), med)
 
@@ -558,7 +570,7 @@ func (s *Server) player(r *http.Request) (response, error) {
 		}
 	}
 
-	return jsonResponse(map[string]any{
+	return map[string]any{
 		"filter":      outFilter(f),
 		"player":      pl,
 		"squads":      squadCount.top(0),
@@ -568,7 +580,7 @@ func (s *Server) player(r *http.Request) (response, error) {
 		"longestKill": longest,
 		"missions":    missions,
 		"trend":       nonNil(trend),
-	})
+	}, true, nil
 }
 
 type counter map[string]int

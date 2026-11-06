@@ -86,6 +86,7 @@ func (s *Server) Handler() (http.Handler, error) {
 
 	s.adminRoutes(mux)
 	s.accountRoutes(mux)
+	s.privateRoutes(mux)
 
 	mux.HandleFunc("GET /api/openapi.json", s.openapi)
 	mux.HandleFunc("GET /api/docs", s.docs)

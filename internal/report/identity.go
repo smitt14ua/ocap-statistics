@@ -59,6 +59,13 @@ func (ids *Identities) Name(name, steamID string) string {
 	return name
 }
 
+// Player returns the player of a Steam account, false when the account played in no
+// processed mission.
+func (ids *Identities) Player(steamID string) (string, bool) {
+	p, ok := ids.bySteam[steamID]
+	return p, ok && steamID != ""
+}
+
 // Names returns every name merged into a player, the player name first.
 func (ids *Identities) Names(player string) []string {
 	if n := ids.names[player]; len(n) > 0 {

@@ -70,7 +70,7 @@ Players' Steam ids (`playerUid` of the snapshots) are stored per mission for the
 
 Players can sign in with Steam (OpenID 2.0, optional, `steam.login`) to see their own statistics highlighted. OpenID needs no API key or registration with Steam, which keeps deployment as simple as before. Steam's answer is trusted only after Steam itself confirms the signature (`check_authentication`), and only when it is addressed to the sign-in this browser started (state cookie), signs the identity and return address, and carries a fresh, unused nonce — the claimed id in the URL alone proves nothing.
 
-A Steam account maps to the names it played under in recordings that carry Steam ids (`mission_players.steam_id`); since those names are merged into one player (15), the page highlights the account's most recent name. Player sessions are separate from admin sessions, grant no rights, and `/api/auth/me` is the only response that contains a Steam id, the viewer's own; it is not part of the public API.
+A Steam account maps to the names it played under in recordings that carry Steam ids (`mission_players.steam_id`); since those names are merged into one player (15), the page highlights the account's most recent name. Player sessions are separate from admin sessions, grant no rights, and `/api/auth/me` is the only response to a browser that contains a Steam id, the viewer's own; it is not part of the public API (the private API, 18, is for services with a token).
 
 ## 15. A player's names are merged by Steam account
 
@@ -93,3 +93,9 @@ Users are bound by issuer and `sub` only. The Steam id, nickname and avatar are 
 Signing out ends the session on this site only, not at the provider. The provider trusts the site, so a redirect to its `end_session_endpoint` with `id_token_hint` would end its own session without asking, and the user would also be signed out of the provider's site and of every other application that relies on it. A user who wants that signs out at the provider, which ends the sessions here through the back-channel logout.
 
 Sessions are server-side rows, so the provider's back-channel logout (OpenID Connect Back-Channel Logout 1.0) simply deletes them: all sessions of the `sub`, or of the provider session `sid` (kept from the ID token) when the logout token names no subject. go-oidc verifies the logout token; the site adds a recent `iat` and rejects a `jti` it has processed (kept in memory: a replay after a restart could only end sessions that the provider already ended).
+
+## 18. A token-protected private API looks players up by Steam id
+
+Community services such as a Discord bot know their users' Steam accounts (often through the same identity provider as 17) and want to show a member's statistics without asking for a nickname, which changes and may be shared. Steam ids stay unpublished (13), so this lookup lives outside the public API: `/api/private/v1/` answers only requests with a Bearer token (`apiToken`; the admin token too, as it already grants more), sends no CORS headers, is not cached by browsers or proxies (`no-store`) and is not in `openapi.json`. Without a token configured it does not exist. A separate token keeps the admin token out of such services, which need read access only.
+
+It finds the player as the site does for a signed-in player: `report.Identities` maps the Steam id to the player its names are merged into (15), and the profile is the public one of that player (`Server.playerProfile`), so it includes the older missions without Steam ids under a name only this account used, and the two can never disagree. The response adds the Steam id it was asked for and the account's names.

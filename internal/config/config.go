@@ -56,13 +56,17 @@ type Config struct {
 	Log       Log    `json:"log"`
 	// AdminToken, when set, authorises POST /api/v1/sync and the admin API with
 	// "Authorization: Bearer <token>" (for scripts and webhooks).
-	AdminToken string   `json:"adminToken"`
-	Admin      Admin    `json:"admin"`
-	OCAP       OCAP     `json:"ocap"`
-	Sync       Sync     `json:"sync"`
-	Stats      Stats    `json:"stats"`
-	Rotation   Rotation `json:"rotation"`
-	UI         UI       `json:"ui"`
+	AdminToken string `json:"adminToken"`
+	// APIToken, when set, authorises the private API (/api/private/v1/...) with
+	// "Authorization: Bearer <token>": statistics looked up by Steam id, for trusted
+	// services such as a community bot. The admin token is accepted there too.
+	APIToken string   `json:"apiToken"`
+	Admin    Admin    `json:"admin"`
+	OCAP     OCAP     `json:"ocap"`
+	Sync     Sync     `json:"sync"`
+	Stats    Stats    `json:"stats"`
+	Rotation Rotation `json:"rotation"`
+	UI       UI       `json:"ui"`
 	// Login selects how players sign in on the site: LoginSteam, LoginOIDC or "" (no sign-in).
 	// Signed-in players see their own statistics highlighted; they are recognised by the
 	// Steam ids in recordings.
@@ -256,6 +260,7 @@ func applyEnv(cfg *Config) error {
 	str("OCAPSTATS_LISTEN", &cfg.Listen)
 	str("OCAPSTATS_DB", &cfg.DB)
 	str("OCAPSTATS_ADMIN_TOKEN", &cfg.AdminToken)
+	str("OCAPSTATS_API_TOKEN", &cfg.APIToken)
 	str("OCAPSTATS_LOG_LEVEL", &cfg.Log.Level)
 	str("OCAPSTATS_LOG_FORMAT", &cfg.Log.Format)
 	str("OCAPSTATS_ADMIN_USERNAME", &cfg.Admin.Username)

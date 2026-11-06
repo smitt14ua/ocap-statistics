@@ -86,6 +86,7 @@ Statistics settings (tags, start date, minimum duration, nickname format, aliase
 | `admin.resetPassword` | `OCAPSTATS_ADMIN_PASSWORD_RESET` | `false` | Overwrite the user's password with the configured one on start |
 | `admin.sessionTTL` | `OCAPSTATS_ADMIN_SESSION_TTL` | `168h` | Admin session lifetime |
 | `adminToken` | `OCAPSTATS_ADMIN_TOKEN` | — | Bearer token for `POST /api/v1/sync` (scripts, webhooks) |
+| `apiToken` | `OCAPSTATS_API_TOKEN` | — | Bearer token for the [private API](#private-api) (players by Steam id); without it (and without `adminToken`) the private API is off |
 | `sync.enabled` | `OCAPSTATS_SYNC_ENABLED` | `true` | Periodic sync |
 | `sync.interval` | `OCAPSTATS_SYNC_INTERVAL` | `10m` | How often to check OCAP for new recordings |
 | `sync.tags` | `OCAPSTATS_SYNC_TAGS` | all | OCAP tags to ingest (comma-separated, exact match) |
@@ -136,7 +137,7 @@ Players can sign in to see a card with their own statistics for the selected per
 
   Users are identified by issuer and `sub`; the Steam id, nickname and avatar are read from the userinfo endpoint at every sign-in. A user without a linked Steam account is signed in and told to link it at the provider. When the provider shares neither a Steam id nor a name — usually because the client may not use the requested scopes, which providers drop silently — the sign-in fails and the log names the scopes the provider granted.
 
-Players are recognised by the Steam id that recent OCAP versions write into recordings (`playerUid`), so only missions recorded with such a version link a Steam account to a name; older missions of the same name count too (see "Players" under [How statistics are computed](#how-statistics-are-computed)). Steam ids are never shown on the site or in the API, except to the signed-in player themselves.
+Players are recognised by the Steam id that recent OCAP versions write into recordings (`playerUid`), so only missions recorded with such a version link a Steam account to a name; older missions of the same name count too (see "Players" under [How statistics are computed](#how-statistics-are-computed)). Steam ids are never shown on the site or in the public API, except to the signed-in player themselves; the token-protected [private API](#private-api) looks players up by them.
 
 Set `OCAPSTATS_PUBLIC_URL` when the address cannot be derived from the request (behind a proxy without `OCAPSTATS_TRUST_PROXY`, or under a path prefix); the OIDC redirect URI is built from it.
 
@@ -178,6 +179,20 @@ curl -o alpha.csv "http://localhost:5080/api/v1/players?squad=ALPHA&format=csv"
 ```
 
 Responses are cached in memory until the data changes and carry an `ETag`, so clients polling the API can send `If-None-Match` and get `304 Not Modified`. Errors look like `{"error": "message", "code": "machine_readable_code"}`.
+
+### Private API
+
+For trusted services of the community (a Discord bot, a forum) that know their users' Steam accounts. It exists only when `apiToken` (or `adminToken`) is set, needs `Authorization: Bearer <apiToken>` (the admin token works too), sends no CORS headers and is not in the public OpenAPI documentation.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/private/v1/players/{steamId}` | The profile of the player a SteamID64 belongs to, the same as `GET /api/v1/players/{name}` (same period parameters), plus `steamId` and `names`: the names the account played under, the most recent first, with the date last seen and the number of missions |
+
+The player is found the same way as for a signed-in player on the site: every mission played with this Steam id, under any name, and the older missions without Steam ids under a name that only this account played under (see "Players" under [How statistics are computed](#how-statistics-are-computed)). Errors: `400 bad_request` (not 17 digits, bad period), `401 unauthorized`, `404 unknown_steam_id` (no processed mission with this Steam id), `404 no_missions` (none in the period).
+
+```bash
+curl -H "Authorization: Bearer $OCAPSTATS_API_TOKEN" "http://localhost:5080/api/private/v1/players/76561190000000001?from=2026-10-01"
+```
 
 ## How statistics are computed
 

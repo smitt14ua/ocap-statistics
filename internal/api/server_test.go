@@ -220,8 +220,8 @@ func TestOpenAPIMatchesRoutes(t *testing.T) {
 		t.Fatalf("only %d documented paths", len(spec.Paths))
 	}
 	for path, ops := range spec.Paths {
-		if strings.HasPrefix(path, "/api/admin/") {
-			t.Errorf("admin endpoint %s is documented publicly", path)
+		if strings.HasPrefix(path, "/api/admin/") || strings.HasPrefix(path, "/api/private/") {
+			t.Errorf("admin or private endpoint %s is documented publicly", path)
 		}
 		if _, ok := ops["get"]; !ok {
 			continue
